@@ -125,3 +125,36 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
 }
+
+export type ReturnItemCondition = 'good' | 'damaged' | 'lost'
+
+export interface ReturnItem {
+  id: string
+  returnId: string
+  rentalItemId: string
+  quantity: number
+  condition: ReturnItemCondition
+  damageFee: string
+  notes?: string | null
+  rentalItem?: {
+    id: string
+    quantity: number
+    returnedQty: number
+    unitPrice: string
+    item?: Pick<Item, 'id' | 'name' | 'code'>
+  }
+}
+
+export interface Return {
+  id: string
+  rentalId: string
+  userId: string
+  returnedAt: string
+  isPartial: boolean
+  lateDays: number
+  lateFee: string
+  notes?: string | null
+  createdAt: string
+  returnItems?: ReturnItem[]
+  rental?: Rental
+}

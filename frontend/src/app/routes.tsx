@@ -17,6 +17,8 @@ import { CategoriesPage } from '@/features/inventory/pages/CategoriesPage'
 import { RentalsListPage } from '@/features/rentals/pages/RentalsListPage'
 import { RentalNewPage } from '@/features/rentals/pages/RentalNewPage'
 import { RentalDetailPage } from '@/features/rentals/pages/RentalDetailPage'
+import { CreateReturnPage } from '@/features/returns/pages/CreateReturnPage'
+import { CreatePaymentPage } from '@/features/payments/pages/CreatePaymentPage'
 
 export function AppRoutes() {
   return (
@@ -44,6 +46,8 @@ export function AppRoutes() {
             <Route path="/rentals" element={<RentalsListPage />} />
             <Route path="/rentals/new" element={<RentalNewPage />} />
             <Route path="/rentals/:id" element={<RentalDetailPage />} />
+            <Route path="/rentals/:id/returns/new" element={<CreateReturnPage />} />
+            <Route path="/rentals/:id/payments/new" element={<CreatePaymentPage />} />
           </Route>
         </Route>
 
