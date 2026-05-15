@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { User } from '@prisma/client';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -69,7 +70,7 @@ export class AuthService {
 
   private async generateTokens(user: User): Promise<TokensDto> {
     const accessPayload = { sub: user.id, email: user.email, role: user.role };
-    const refreshPayload = { sub: user.id };
+    const refreshPayload = { sub: user.id, jti: randomUUID() };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(accessPayload, {
