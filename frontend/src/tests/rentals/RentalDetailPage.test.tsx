@@ -19,6 +19,14 @@ vi.mock('@/features/payments/hooks/usePayments', () => ({
   usePaymentsByRental: vi.fn(),
 }))
 
+vi.mock('@/features/documents/hooks/useDocuments', () => ({
+  useDocumentsByRental: vi.fn().mockReturnValue({ data: [] }),
+  useGenerateContract: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
+  useGenerateReceipt: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
+  useGenerateReturnProof: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
+  useDownloadDocument: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
+}))
+
 vi.mock('@/stores/auth.store', () => ({
   useAuthStore: vi.fn(),
 }))

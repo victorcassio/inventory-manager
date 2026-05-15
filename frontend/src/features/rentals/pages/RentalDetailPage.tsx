@@ -10,6 +10,9 @@ import { StatusBadge } from '@/components/feedback/StatusBadge'
 import { ConfirmDialog } from '@/components/feedback/ConfirmDialog'
 import { ErrorState } from '@/components/feedback/ErrorState'
 import { PaymentsTable } from '@/features/payments/components/PaymentsTable'
+import { DocumentsTable } from '@/features/documents/components/DocumentsTable'
+import { DocumentActions } from '@/features/documents/components/DocumentActions'
+import { useDocumentsByRental } from '@/features/documents/hooks/useDocuments'
 import { useRental, useCancelRental } from '../hooks/useRentals'
 import { useReturnsByRental } from '@/features/returns/hooks/useReturns'
 import { usePaymentsByRental } from '@/features/payments/hooks/usePayments'
@@ -30,6 +33,7 @@ export function RentalDetailPage() {
   const { data: rental, isLoading, isError, refetch } = useRental(id!)
   const { data: returns = [] } = useReturnsByRental(id!)
   const { data: payments = [] } = usePaymentsByRental(id!)
+  const { data: documents = [] } = useDocumentsByRental(id!)
   const cancelRental = useCancelRental()
   const [confirmCancel, setConfirmCancel] = useState(false)
 
@@ -287,6 +291,26 @@ export function RentalDetailPage() {
           <CardHeader><CardTitle>Pagamentos ({payments.length})</CardTitle></CardHeader>
           <CardContent>
             <PaymentsTable payments={payments} />
+          </CardContent>
+        </Card>
+
+        {/* Documents */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Documentos ({documents.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <DocumentsTable documents={documents} />
+            <div>
+              <p className="text-sm font-semibold mb-3">Gerar Documentos</p>
+              <DocumentActions
+                rentalId={id!}
+                role={role!}
+                payments={payments}
+                returns={returns}
+                existingDocuments={documents}
+              />
+            </div>
           </CardContent>
         </Card>
       </div>

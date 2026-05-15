@@ -158,3 +158,20 @@ export interface Return {
   returnItems?: ReturnItem[]
   rental?: Rental
 }
+
+export type DocumentType = 'contract' | 'receipt' | 'return_proof'
+export type DocumentStatus = 'generated' | 'voided'
+
+export interface Document {
+  id: string
+  type: DocumentType
+  filename: string
+  path: string
+  status: DocumentStatus
+  rentalId?: string | null
+  customerId?: string | null
+  paymentId?: string | null
+  returnId?: string | null
+  userId?: string | null
+  createdAt: string
+}
