@@ -1,0 +1,200 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { DocumentStatus, DocumentType } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { buildContractPdf } from './templates/contract.template';
+import { buildReceiptPdf } from './templates/receipt.template';
+import { buildReturnProofPdf } from './templates/return-proof.template';
+
+interface DownloadResult {
+  path: string;
+  filename: string;
+  mimeType: string;
+}
+
+@Injectable()
+export class DocumentsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
+
+  // ─── Contract ─────────────────────────────────────────────────────────────
+
+  async generateContract(rentalId: string, userId: string): Promise<any> {
+    const rental = await this.prisma.rental.findUnique({
+      where: { id: rentalId },
+      include: {
+        customer: true,
+        rentalItems: { include: { item: true } },
+      },
+    });
+    if (!rental) throw new NotFoundException('Rental not found');
+
+    const buffer = await buildContractPdf(rental);
+    const { filePath, filename } = await this.savePdf(rental.id, 'contract', buffer);
+
+    const document = await this.prisma.document.create({
+      data: {
+        type: DocumentType.contract,
+        status: DocumentStatus.generated,
+        filename,
+        path: filePath,
+        rentalId: rental.id,
+        customerId: rental.customerId,
+        userId,
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      action: 'generate_document',
+      entity: 'Document',
+      entityId: document.id,
+      payload: {
+        type: 'contract',
+        rentalId: rental.id,
+        customerId: rental.customerId,
+        filename,
+        path: filePath,
+      } as any,
+    });
+
+    return document;
+  }
+
+  // ─── Receipt ──────────────────────────────────────────────────────────────
+
+  async generateReceipt(paymentId: string, userId: string): Promise<any> {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        rental: { include: { customer: true } },
+        user: { select: { id: true, name: true } },
+      },
+    }) as any;
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    const buffer = await buildReceiptPdf(payment);
+    const { filePath, filename } = await this.savePdf(payment.rentalId, 'receipt', buffer);
+
+    const document = await this.prisma.document.create({
+      data: {
+        type: DocumentType.receipt,
+        status: DocumentStatus.generated,
+        filename,
+        path: filePath,
+        rentalId: payment.rentalId,
+        customerId: payment.rental?.customerId ?? null,
+        paymentId,
+        userId,
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      action: 'generate_document',
+      entity: 'Document',
+      entityId: document.id,
+      payload: {
+        type: 'receipt',
+        rentalId: payment.rentalId,
+        customerId: payment.rental?.customerId,
+        paymentId,
+        filename,
+        path: filePath,
+      } as any,
+    });
+
+    return document;
+  }
+
+  // ─── Return Proof ─────────────────────────────────────────────────────────
+
+  async generateReturnProof(returnId: string, userId: string): Promise<any> {
+    const returnRecord = await this.prisma.return.findUnique({
+      where: { id: returnId },
+      include: {
+        rental: { include: { customer: true } },
+        returnItems: {
+          include: {
+            rentalItem: { include: { item: true } },
+          },
+        },
+      },
+    }) as any;
+    if (!returnRecord) throw new NotFoundException('Return not found');
+
+    const buffer = await buildReturnProofPdf(returnRecord);
+    const { filePath, filename } = await this.savePdf(returnRecord.rentalId, 'return_proof', buffer);
+
+    const document = await this.prisma.document.create({
+      data: {
+        type: DocumentType.return_proof,
+        status: DocumentStatus.generated,
+        filename,
+        path: filePath,
+        rentalId: returnRecord.rentalId,
+        customerId: returnRecord.rental?.customerId ?? null,
+        returnId,
+        userId,
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      action: 'generate_document',
+      entity: 'Document',
+      entityId: document.id,
+      payload: {
+        type: 'return_proof',
+        rentalId: returnRecord.rentalId,
+        customerId: returnRecord.rental?.customerId,
+        returnId,
+        filename,
+        path: filePath,
+      } as any,
+    });
+
+    return document;
+  }
+
+  // ─── List & Download ──────────────────────────────────────────────────────
+
+  async listDocumentsByRental(rentalId: string): Promise<any[]> {
+    return this.prisma.document.findMany({
+      where: { rentalId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async downloadDocument(documentId: string): Promise<DownloadResult> {
+    const document = await this.prisma.document.findUnique({ where: { id: documentId } });
+    if (!document) throw new NotFoundException('Document not found');
+
+    try {
+      await fs.access(document.path);
+    } catch {
+      throw new NotFoundException('Document file not found on disk');
+    }
+
+    return { path: document.path, filename: document.filename, mimeType: 'application/pdf' };
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  private async savePdf(
+    rentalId: string,
+    type: string,
+    buffer: Buffer,
+  ): Promise<{ filePath: string; filename: string }> {
+    const dir = path.join(process.cwd(), 'storage', 'documents', rentalId);
+    await fs.mkdir(dir, { recursive: true });
+    const filename = `${type}-${Date.now()}.pdf`;
+    const filePath = path.join(dir, filename);
+    await fs.writeFile(filePath, buffer);
+    return { filePath, filename };
+  }
+}
