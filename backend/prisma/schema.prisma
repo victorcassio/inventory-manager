@@ -307,9 +307,10 @@ model Payment {
   notes         String?
   createdAt     DateTime      @default(now()) @map("created_at")
 
-  rental    Rental     @relation(fields: [rentalId], references: [id])
-  user      User       @relation(fields: [userId], references: [id])
-  documents Document[]
+  rental                Rental                @relation(fields: [rentalId], references: [id])
+  user                  User                  @relation(fields: [userId], references: [id])
+  documents             Document[]
+  financialTransactions FinancialTransaction[]
 
   @@map("payments")
 }
@@ -318,6 +319,7 @@ model FinancialTransaction {
   id          String                       @id @default(uuid())
   userId      String                       @map("user_id")
   rentalId    String?                      @map("rental_id")
+  paymentId   String?                      @map("payment_id")
   type        FinancialTransactionType
   category    FinancialTransactionCategory
   origin      FinancialTransactionOrigin   @default(manual)
@@ -328,8 +330,9 @@ model FinancialTransaction {
   createdAt   DateTime                     @default(now()) @map("created_at")
   updatedAt   DateTime                     @updatedAt @map("updated_at")
 
-  user   User    @relation(fields: [userId], references: [id])
-  rental Rental? @relation(fields: [rentalId], references: [id])
+  user    User     @relation(fields: [userId], references: [id])
+  rental  Rental?  @relation(fields: [rentalId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
 
   @@map("financial_transactions")
 }
