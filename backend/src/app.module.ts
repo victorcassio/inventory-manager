@@ -9,6 +9,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { RentalsModule } from './modules/rentals/rentals.module';
+import { ReturnsModule } from './modules/returns/returns.module';
 import appConfig from './config/app.config';
 
 @Module({
@@ -32,6 +33,7 @@ import appConfig from './config/app.config';
     CustomersModule,
     InventoryModule,
     RentalsModule,
+    ReturnsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
