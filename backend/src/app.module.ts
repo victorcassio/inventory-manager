@@ -11,6 +11,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { RentalsModule } from './modules/rentals/rentals.module';
 import { ReturnsModule } from './modules/returns/returns.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { FinancialModule } from './modules/financial/financial.module';
 import appConfig from './config/app.config';
 
 @Module({
@@ -36,6 +37,7 @@ import appConfig from './config/app.config';
     RentalsModule,
     ReturnsModule,
     PaymentsModule,
+    FinancialModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

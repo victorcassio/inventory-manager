@@ -327,6 +327,9 @@ model FinancialTransaction {
   description String
   date        DateTime                     @db.Date
   isVoided    Boolean                      @default(false) @map("is_voided")
+  voidedAt    DateTime?                    @map("voided_at")
+  voidedById  String?                      @map("voided_by_id")
+  voidReason  String?                      @map("void_reason")
   createdAt   DateTime                     @default(now()) @map("created_at")
   updatedAt   DateTime                     @updatedAt @map("updated_at")
 
