@@ -1,0 +1,127 @@
+export type UserRole = 'admin' | 'attendant' | 'financial';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  lastLogin?: string | null;
+  createdAt: string;
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  document: string;
+  documentType: 'cpf' | 'cnpj';
+  phone?: string | null;
+  email?: string | null;
+  address?: CustomerAddress | null;
+  notes?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerAddress {
+  street: string;
+  number: string;
+  complement?: string;
+  district: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
+export interface ItemCategory {
+  id: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Item {
+  id: string;
+  categoryId: string;
+  category?: ItemCategory;
+  name: string;
+  description?: string | null;
+  code: string;
+  dailyRate: string;
+  totalQty: number;
+  availableQty: number;
+  rentedQty: number;
+  maintenanceQty: number;
+  condition: 'new' | 'good' | 'fair' | 'maintenance';
+  notes?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RentalStatus = 'active' | 'returned' | 'canceled';
+export type ComputedRentalStatus = 'active' | 'overdue' | 'returned' | 'canceled';
+
+export interface RentalItem {
+  id: string;
+  rentalId: string;
+  itemId: string;
+  item?: Pick<Item, 'id' | 'name' | 'code' | 'dailyRate'>;
+  quantity: number;
+  unitPrice: string;
+  returnedQty: number;
+}
+
+export interface Rental {
+  id: string;
+  customerId: string;
+  customer?: Pick<Customer, 'id' | 'name' | 'document'>;
+  userId: string;
+  contractNumber: string;
+  status: RentalStatus;
+  computedStatus: ComputedRentalStatus;
+  daysOverdue: number;
+  startedAt: string;
+  expectedReturn: string;
+  returnedAt?: string | null;
+  pricingType: 'daily' | 'fixed' | 'custom';
+  deposit: string;
+  discount: string;
+  lateFee: string;
+  extraCosts: string;
+  subtotal?: string | null;
+  total?: string | null;
+  paidAmount: string;
+  balanceAmount?: number;
+  notes?: string | null;
+  rentalItems?: RentalItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Payment {
+  id: string;
+  rentalId: string;
+  userId: string;
+  amount: string;
+  method: 'cash' | 'pix' | 'card' | 'transfer';
+  paidAt: string;
+  referenceCode?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
