@@ -27,18 +27,20 @@ enum ItemCondition {
 }
 
 enum InventoryMovementType {
-  in
-  out
-  adjustment
-  maintenance
-  return
+  initial_stock
+  rental_out
+  rental_return
+  rental_reversal
+  manual_adjustment
+  maintenance_in
+  maintenance_out
+  deactivation
 }
 
 enum RentalStatus {
   active
   returned
-  overdue
-  cancelled
+  canceled
 }
 
 enum PricingType {
@@ -68,6 +70,12 @@ enum FinancialTransactionCategory {
   other
 }
 
+enum FinancialTransactionOrigin {
+  manual
+  payment
+  adjustment
+}
+
 enum ReturnItemCondition {
   good
   damaged
@@ -78,6 +86,11 @@ enum DocumentType {
   receipt
   contract
   return_proof
+}
+
+enum DocumentStatus {
+  generated
+  voided
 }
 
 // ─── Usuários ────────────────────────────────────────────────────────────────
@@ -133,7 +146,8 @@ model Customer {
   createdAt    DateTime             @default(now()) @map("created_at")
   updatedAt    DateTime             @updatedAt @map("updated_at")
 
-  rentals Rental[]
+  rentals   Rental[]
+  documents Document[]
 
   @@map("customers")
 }
@@ -144,7 +158,9 @@ model ItemCategory {
   id          String   @id @default(uuid())
   name        String   @db.VarChar(100)
   description String?
+  isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   items Item[]
 
@@ -210,6 +226,7 @@ model Rental {
   extraCosts     Decimal      @default(0) @map("extra_costs") @db.Decimal(10, 2)
   subtotal       Decimal?     @db.Decimal(10, 2)
   total          Decimal?     @db.Decimal(10, 2)
+  paidAmount     Decimal      @default(0) @map("paid_amount") @db.Decimal(10, 2)
   notes          String?
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
@@ -257,6 +274,7 @@ model Return {
   rental      Rental       @relation(fields: [rentalId], references: [id])
   user        User         @relation(fields: [userId], references: [id])
   returnItems ReturnItem[]
+  documents   Document[]
 
   @@map("returns")
 }
@@ -279,17 +297,19 @@ model ReturnItem {
 // ─── Financeiro ──────────────────────────────────────────────────────────────
 
 model Payment {
-  id        String        @id @default(uuid())
-  rentalId  String        @map("rental_id")
-  userId    String        @map("user_id")
-  amount    Decimal       @db.Decimal(10, 2)
-  method    PaymentMethod
-  paidAt    DateTime      @default(now()) @map("paid_at")
-  notes     String?
-  createdAt DateTime      @default(now()) @map("created_at")
+  id            String        @id @default(uuid())
+  rentalId      String        @map("rental_id")
+  userId        String        @map("user_id")
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  paidAt        DateTime      @default(now()) @map("paid_at")
+  referenceCode String?       @map("reference_code") @db.VarChar(100)
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
 
-  rental Rental @relation(fields: [rentalId], references: [id])
-  user   User   @relation(fields: [userId], references: [id])
+  rental    Rental     @relation(fields: [rentalId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
+  documents Document[]
 
   @@map("payments")
 }
@@ -300,10 +320,13 @@ model FinancialTransaction {
   rentalId    String?                      @map("rental_id")
   type        FinancialTransactionType
   category    FinancialTransactionCategory
+  origin      FinancialTransactionOrigin   @default(manual)
   amount      Decimal                      @db.Decimal(10, 2)
   description String
   date        DateTime                     @db.Date
+  isVoided    Boolean                      @default(false) @map("is_voided")
   createdAt   DateTime                     @default(now()) @map("created_at")
+  updatedAt   DateTime                     @updatedAt @map("updated_at")
 
   user   User    @relation(fields: [userId], references: [id])
   rental Rental? @relation(fields: [rentalId], references: [id])
@@ -314,16 +337,23 @@ model FinancialTransaction {
 // ─── Documentos ──────────────────────────────────────────────────────────────
 
 model Document {
-  id        String       @id @default(uuid())
-  rentalId  String       @map("rental_id")
-  userId    String       @map("user_id")
-  type      DocumentType
-  filename  String       @db.VarChar(255)
-  path      String       @db.VarChar(500)
-  createdAt DateTime     @default(now()) @map("created_at")
+  id         String         @id @default(uuid())
+  type       DocumentType
+  status     DocumentStatus @default(generated)
+  filename   String         @db.VarChar(255)
+  path       String         @db.VarChar(500)
+  rentalId   String?        @map("rental_id")
+  customerId String?        @map("customer_id")
+  paymentId  String?        @map("payment_id")
+  returnId   String?        @map("return_id")
+  userId     String         @map("user_id")
+  createdAt  DateTime       @default(now()) @map("created_at")
 
-  rental Rental @relation(fields: [rentalId], references: [id])
-  user   User   @relation(fields: [userId], references: [id])
+  rental       Rental?   @relation(fields: [rentalId], references: [id])
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  payment      Payment?  @relation(fields: [paymentId], references: [id])
+  rentalReturn Return?   @relation(fields: [returnId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
 
   @@map("documents")
 }
@@ -343,4 +373,13 @@ model AuditLog {
   user User @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
+}
+
+// ─── Controle de sequência de contratos ──────────────────────────────────────
+
+model ContractCounter {
+  year    Int @id
+  lastSeq Int @default(0) @map("last_seq")
+
+  @@map("contract_counters")
 }
