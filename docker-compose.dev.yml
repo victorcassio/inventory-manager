@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: inventory_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - '5050:80'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
