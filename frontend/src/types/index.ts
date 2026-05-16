@@ -175,3 +175,42 @@ export interface Document {
   userId?: string | null
   createdAt: string
 }
+
+export type FinancialTransactionType = 'income' | 'expense'
+export type FinancialTransactionCategory =
+  | 'rental_income'
+  | 'stock_investment'
+  | 'maintenance'
+  | 'transport'
+  | 'fixed_cost'
+  | 'other'
+export type FinancialTransactionOrigin = 'manual' | 'payment' | 'adjustment'
+
+export interface FinancialTransaction {
+  id: string
+  userId: string
+  rentalId?: string | null
+  paymentId?: string | null
+  type: FinancialTransactionType
+  category: FinancialTransactionCategory
+  origin: FinancialTransactionOrigin
+  amount: string
+  description: string
+  date: string
+  isVoided: boolean
+  voidedAt?: string | null
+  voidedById?: string | null
+  voidReason?: string | null
+  createdAt: string
+  updatedAt: string
+  user?: Pick<User, 'id' | 'name' | 'email'>
+  rental?: { id: string; contractNumber: string } | null
+  payment?: { id: string; amount: string; method: string; paidAt: string } | null
+}
+
+export interface FinancialSummary {
+  totalIncome: number
+  totalExpense: number
+  balance: number
+  voidedCount: number
+}
