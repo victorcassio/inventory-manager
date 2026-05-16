@@ -14,7 +14,9 @@ const PAGE_TITLES: Record<string, string> = {
   '/rentals': 'Locações',
   '/rentals/new': 'Nova Locação',
   '/payments': 'Pagamentos',
+  '/financial': 'Financeiro',
   '/financial/transactions': 'Financeiro',
+  '/financial/transactions/new': 'Novo Lançamento',
   '/documents': 'Documentos',
   '/403': 'Acesso Negado',
 }

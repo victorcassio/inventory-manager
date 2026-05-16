@@ -31,7 +31,7 @@ const navItems: NavItem[] = [
   { label: 'Locações',     href: '/rentals',                    icon: ClipboardList,   roles: ['admin', 'attendant', 'financial'] },
   { label: 'Devoluções',   href: '/rentals?status=returned',    icon: RotateCcw,       roles: ['admin', 'attendant'] },
   { label: 'Pagamentos',   href: '/payments',                   icon: CreditCard,      roles: ['admin', 'financial'] },
-  { label: 'Financeiro',   href: '/financial/transactions',     icon: TrendingUp,      roles: ['admin', 'financial'] },
+  { label: 'Financeiro',   href: '/financial',                  icon: TrendingUp,      roles: ['admin', 'financial'] },
   { label: 'Documentos',   href: '/documents',                  icon: FileText,        roles: ['admin', 'attendant', 'financial'] },
 ]
 
