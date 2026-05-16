@@ -103,6 +103,8 @@ describe('FinancialDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/lançamento anulado/i)).toBeInTheDocument()
       expect(screen.getByText('Lançamento duplicado')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /editar/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /anular/i })).not.toBeInTheDocument()
     })
   })
 

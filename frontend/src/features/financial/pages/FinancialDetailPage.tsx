@@ -42,7 +42,6 @@ export function FinancialDetailPage() {
     await voidTransaction.mutateAsync({ id: id!, reason: values.reason })
     setVoidOpen(false)
     voidForm.reset()
-    refetch()
   }
 
   if (isLoading) {
