@@ -84,8 +84,8 @@ export class FinancialService {
   }
 
   async listTransactions(query: ListQuery): Promise<PaginatedResult<any>> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: any = {

@@ -34,11 +34,9 @@ export function RentalStatusPieChart({ data }: Props) {
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={90}
+                innerRadius={55}
+                outerRadius={85}
                 dataKey="value"
-                label={({ name, value }) => `${name}: ${value}`}
-                labelLine={false}
               >
                 {chartData.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
