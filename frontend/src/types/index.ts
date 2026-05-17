@@ -214,3 +214,80 @@ export interface FinancialSummary {
   balance: number
   voidedCount: number
 }
+
+export interface DashboardPeriod {
+  currentMonth: string
+  historyMonths: number
+  startDate: string
+  endDate: string
+}
+
+export interface DashboardPermissions {
+  canViewFinancial: boolean
+  canViewOperational: boolean
+  canViewInventory: boolean
+  canViewOperationalCharts: boolean
+}
+
+export interface DashboardRecentPayment {
+  id: string
+  rentalId: string
+  contractNumber: string
+  customerName: string
+  amount: number
+  method: string
+  paidAt: string
+}
+
+export interface DashboardFinancial {
+  totalIncome: number
+  totalExpense: number
+  balance: number
+  recentPayments: DashboardRecentPayment[]
+}
+
+export interface DashboardUpcomingReturn {
+  id: string
+  contractNumber: string
+  customerName: string
+  expectedReturn: string
+}
+
+export interface DashboardOverdueReturn extends DashboardUpcomingReturn {
+  daysOverdue: number
+}
+
+export interface DashboardRentals {
+  active: number
+  overdue: number
+  returned: number
+  canceled: number
+  byStatus: { active: number; overdue: number; returned: number; canceled: number }
+  upcomingReturns: DashboardUpcomingReturn[]
+  overdueReturns: DashboardOverdueReturn[]
+}
+
+export interface DashboardInventory {
+  totalItems: number
+  availableItems: number
+  rentedItems: number
+  maintenanceItems: number
+  occupancyRate: number
+}
+
+export interface DashboardMonthlyHistory {
+  month: string
+  income: number
+  expense: number
+  balance: number
+  cumulativeIncome: number
+}
+
+export interface DashboardSummary {
+  period: DashboardPeriod
+  permissions: DashboardPermissions
+  financial: DashboardFinancial | null
+  rentals: DashboardRentals
+  inventory: DashboardInventory
+  monthlyHistory: DashboardMonthlyHistory[]
+}
