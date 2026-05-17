@@ -31,35 +31,27 @@ function getPageTitle(pathname: string): string {
 }
 
 export function AppLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarVisible, setSidebarVisible] = useState(true)
   const location = useLocation()
   const title = getPageTitle(location.pathname)
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {/* Sidebar — always visible */}
-      <div className="flex flex-shrink-0">
+    <div className="flex h-screen overflow-hidden">
+      {/* Sidebar — toggled by ☰ button */}
+      <div
+        className={cn(
+          'flex flex-shrink-0 transition-all duration-200',
+          sidebarVisible ? 'w-64' : 'w-0 overflow-hidden',
+        )}
+      >
         <Sidebar />
       </div>
-
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-40">
-          <div
-            className="fixed inset-0 bg-black/50"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div className="fixed inset-y-0 left-0 z-50 flex">
-            <Sidebar onClose={() => setSidebarOpen(false)} />
-          </div>
-        </div>
-      )}
 
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header
           title={title}
-          onMenuClick={() => setSidebarOpen(true)}
+          onMenuClick={() => setSidebarVisible(v => !v)}
         />
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
