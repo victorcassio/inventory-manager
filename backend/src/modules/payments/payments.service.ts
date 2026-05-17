@@ -13,6 +13,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService, Tx } from '../audit/audit.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { PaginatedResult } from '../../common/types/paginated-result.interface';
 
 interface ListQuery {
   page?: number;
@@ -22,13 +23,6 @@ interface ListQuery {
   method?: PaymentMethod;
   dateFrom?: string;
   dateTo?: string;
-}
-
-interface PaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
 }
 
 @Injectable()

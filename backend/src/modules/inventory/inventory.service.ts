@@ -12,6 +12,7 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
+import { PaginatedResult } from '../../common/types/paginated-result.interface';
 
 interface ItemListQuery {
   page?: number;
@@ -19,13 +20,6 @@ interface ItemListQuery {
   categoryId?: string;
   condition?: string;
   availableOnly?: boolean;
-}
-
-interface PaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
 }
 
 @Injectable()

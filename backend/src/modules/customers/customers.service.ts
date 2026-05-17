@@ -7,6 +7,7 @@ import { Customer } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService, Tx } from '../audit/audit.service';
 import { normalizeDocument } from '../../common/validators/document.validator';
+import { PaginatedResult } from '../../common/types/paginated-result.interface';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 
@@ -16,13 +17,6 @@ interface ListQuery {
   name?: string;
   document?: string;
   isActive?: boolean;
-}
-
-interface PaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
 }
 
 @Injectable()

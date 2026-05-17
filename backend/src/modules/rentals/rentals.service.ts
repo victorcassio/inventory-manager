@@ -9,6 +9,7 @@ import { InventoryService } from '../inventory/inventory.service';
 import { AuditService, Tx } from '../audit/audit.service';
 import { CreateRentalDto } from './dto/create-rental.dto';
 import { UpdateRentalDto } from './dto/update-rental.dto';
+import { PaginatedResult } from '../../common/types/paginated-result.interface';
 
 interface ListQuery {
   page?: number;
@@ -19,13 +20,6 @@ interface ListQuery {
   contractNumber?: string;
   startDate?: string;
   expectedReturnDate?: string;
-}
-
-interface PaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
 }
 
 function diffDays(end: Date, start: Date): number {

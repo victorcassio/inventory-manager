@@ -13,6 +13,7 @@ import { AuditService, Tx } from '../audit/audit.service';
 import { CreateFinancialTransactionDto } from './dto/create-financial-transaction.dto';
 import { UpdateFinancialTransactionDto } from './dto/update-financial-transaction.dto';
 import { VoidFinancialTransactionDto } from './dto/void-financial-transaction.dto';
+import { PaginatedResult } from '../../common/types/paginated-result.interface';
 
 interface ListQuery {
   page?: number;
@@ -25,13 +26,6 @@ interface ListQuery {
   paymentId?: string;
   dateFrom?: string;
   dateTo?: string;
-}
-
-interface PaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
 }
 
 @Injectable()
