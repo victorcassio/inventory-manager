@@ -36,15 +36,15 @@ export function AppLayout() {
   const title = getPageTitle(location.pathname)
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex md:flex-shrink-0">
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Sidebar — always visible */}
+      <div className="flex flex-shrink-0">
         <Sidebar />
       </div>
 
-      {/* Mobile sidebar overlay */}
+      {/* Mobile overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-40">
           <div
             className="fixed inset-0 bg-black/50"
             onClick={() => setSidebarOpen(false)}
@@ -61,7 +61,7 @@ export function AppLayout() {
           title={title}
           onMenuClick={() => setSidebarOpen(true)}
         />
-        <main className={cn('flex-1 overflow-y-auto p-6')}>
+        <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
       </div>

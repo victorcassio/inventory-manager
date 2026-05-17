@@ -10,6 +10,16 @@ import { PrismaService } from '../../prisma/prisma.service';
 export interface TokensDto {
   accessToken: string;
   refreshToken: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    isActive: boolean;
+    lastLogin: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  };
 }
 
 @Injectable()
@@ -34,11 +44,21 @@ export class AuthService {
   async login(user: User): Promise<TokensDto> {
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
-    await this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        lastLogin: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
-    return tokens;
+    return { ...tokens, user: updated };
   }
 
   async refreshTokens(refreshToken: string): Promise<TokensDto> {
