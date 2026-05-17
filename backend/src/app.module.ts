@@ -13,6 +13,7 @@ import { ReturnsModule } from './modules/returns/returns.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { FinancialModule } from './modules/financial/financial.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import appConfig from './config/app.config';
 
 @Module({
@@ -40,6 +41,7 @@ import appConfig from './config/app.config';
     PaymentsModule,
     FinancialModule,
     DocumentsModule,
+    DashboardModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
