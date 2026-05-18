@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -37,8 +37,11 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
 
 export function RentalsListPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuthStore()
-  const [computedStatus, setComputedStatus] = useState<string>('')
+  const [computedStatus, setComputedStatus] = useState<string>(
+    searchParams.get('status') ?? ''
+  )
   const { page, limit, setPage } = usePagination()
 
   const canManage = user?.role === 'admin' || user?.role === 'attendant'
