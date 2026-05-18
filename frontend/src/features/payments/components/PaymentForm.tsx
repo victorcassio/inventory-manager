@@ -1,6 +1,7 @@
 import { useFormContext } from 'react-hook-form'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -116,7 +117,7 @@ export function PaymentForm({ rental, totalDamageFees }: Props) {
             <FormItem>
               <FormLabel>Data do Pagamento</FormLabel>
               <FormControl>
-                <Input type="datetime-local" {...field} />
+                <DateInput {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
