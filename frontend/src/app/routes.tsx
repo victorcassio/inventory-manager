@@ -25,6 +25,7 @@ import { FinancialNewPage } from '@/features/financial/pages/FinancialNewPage'
 import { FinancialDetailPage } from '@/features/financial/pages/FinancialDetailPage'
 import { FinancialEditPage } from '@/features/financial/pages/FinancialEditPage'
 import { DocumentsListPage } from '@/features/documents/pages/DocumentsListPage'
+import { CalendarPage } from '@/features/calendar/pages/CalendarPage'
 
 export function AppRoutes() {
   return (
@@ -55,6 +56,7 @@ export function AppRoutes() {
             <Route path="/rentals/:id/returns/new" element={<CreateReturnPage />} />
             <Route path="/rentals/:id/payments/new" element={<CreatePaymentPage />} />
             <Route path="/payments" element={<PaymentsListPage />} />
+            <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/documents" element={<DocumentsListPage />} />
             <Route path="/financial" element={<Navigate to="/financial/transactions" replace />} />
             <Route path="/financial/transactions" element={<FinancialListPage />} />
