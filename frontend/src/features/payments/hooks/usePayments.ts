@@ -27,7 +27,14 @@ export function usePayment(paymentId: string) {
   })
 }
 
-export function usePayments(params?: { rentalId?: string; method?: string; page?: number; limit?: number }) {
+export function usePayments(params?: {
+  rentalId?: string
+  method?: string
+  dateFrom?: string
+  dateTo?: string
+  page?: number
+  limit?: number
+}) {
   return useQuery({
     queryKey: paymentKeys.list(params),
     queryFn: () => paymentsApi.list(params),

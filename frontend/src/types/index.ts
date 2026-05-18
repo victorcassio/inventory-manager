@@ -117,6 +117,12 @@ export interface Payment {
   referenceCode?: string | null;
   notes?: string | null;
   createdAt: string;
+  rental?: {
+    id: string;
+    contractNumber: string;
+    customer?: { id: string; name: string } | null;
+  } | null;
+  user?: { id: string; name: string } | null;
 }
 
 export interface PaginatedResponse<T> {

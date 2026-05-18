@@ -19,6 +19,7 @@ import { RentalNewPage } from '@/features/rentals/pages/RentalNewPage'
 import { RentalDetailPage } from '@/features/rentals/pages/RentalDetailPage'
 import { CreateReturnPage } from '@/features/returns/pages/CreateReturnPage'
 import { CreatePaymentPage } from '@/features/payments/pages/CreatePaymentPage'
+import { PaymentsListPage } from '@/features/payments/pages/PaymentsListPage'
 import { FinancialListPage } from '@/features/financial/pages/FinancialListPage'
 import { FinancialNewPage } from '@/features/financial/pages/FinancialNewPage'
 import { FinancialDetailPage } from '@/features/financial/pages/FinancialDetailPage'
@@ -52,6 +53,7 @@ export function AppRoutes() {
             <Route path="/rentals/:id" element={<RentalDetailPage />} />
             <Route path="/rentals/:id/returns/new" element={<CreateReturnPage />} />
             <Route path="/rentals/:id/payments/new" element={<CreatePaymentPage />} />
+            <Route path="/payments" element={<PaymentsListPage />} />
             <Route path="/financial" element={<Navigate to="/financial/transactions" replace />} />
             <Route path="/financial/transactions" element={<FinancialListPage />} />
             <Route path="/financial/transactions/new" element={<FinancialNewPage />} />
