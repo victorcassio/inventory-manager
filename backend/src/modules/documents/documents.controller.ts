@@ -6,16 +6,18 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Res,
   Request,
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { UserRole } from '@prisma/client';
+import { DocumentStatus, DocumentType, UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { DocumentsService } from './documents.service';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 import * as fs from 'fs';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,6 +50,21 @@ export class DocumentsController {
   @Roles(UserRole.admin, UserRole.attendant, UserRole.financial)
   listDocumentsByRental(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.listDocumentsByRental(id);
+  }
+
+  @Get('documents')
+  @Roles(UserRole.admin, UserRole.attendant, UserRole.financial)
+  listDocuments(
+    @Query()
+    query: PaginationDto & {
+      type?: DocumentType;
+      status?: DocumentStatus;
+      rentalId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    },
+  ) {
+    return this.documentsService.listDocuments(query);
   }
 
   @Get('documents/:id/download')

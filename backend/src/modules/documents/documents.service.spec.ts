@@ -103,6 +103,7 @@ const mockPrisma = {
     create: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
+    count: jest.fn(),
   },
 };
 
@@ -340,6 +341,81 @@ describe('DocumentsService', () => {
       mockPrisma.document.findUnique.mockResolvedValue(baseDocument);
       (fsMock.access as jest.Mock).mockRejectedValue(new Error('ENOENT'));
       await expect(service.downloadDocument('doc-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── listDocuments ────────────────────────────────────────────────────────
+
+  describe('listDocuments', () => {
+    const docWithRental = {
+      ...baseDocument,
+      rental: { id: 'rental-1', contractNumber: '2026-0001', customer: { id: 'cust-1', name: 'Acme Corp' } },
+    };
+
+    beforeEach(() => {
+      mockPrisma.document.findMany.mockResolvedValue([docWithRental]);
+      mockPrisma.document.count.mockResolvedValue(1);
+    });
+
+    it('retorna lista paginada com rental incluso', async () => {
+      const result = await service.listDocuments({});
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(20);
+    });
+
+    it('inclui rental no findMany', async () => {
+      await service.listDocuments({});
+      expect(mockPrisma.document.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({ rental: expect.anything() }),
+        }),
+      );
+    });
+
+    it('filtra por type quando fornecido', async () => {
+      await service.listDocuments({ type: 'contract' as any });
+      expect(mockPrisma.document.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ type: 'contract' }) }),
+      );
+    });
+
+    it('filtra por status quando fornecido', async () => {
+      await service.listDocuments({ status: 'generated' as any });
+      expect(mockPrisma.document.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ status: 'generated' }) }),
+      );
+    });
+
+    it('filtra por rentalId quando fornecido', async () => {
+      await service.listDocuments({ rentalId: 'rental-1' });
+      expect(mockPrisma.document.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ rentalId: 'rental-1' }) }),
+      );
+    });
+
+    it('filtra por dateFrom e dateTo', async () => {
+      await service.listDocuments({ dateFrom: '2026-05-01', dateTo: '2026-05-31' });
+      expect(mockPrisma.document.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ createdAt: { gte: expect.any(Date), lte: expect.any(Date) } }),
+        }),
+      );
+    });
+
+    it('aplica paginação via skip e take', async () => {
+      await service.listDocuments({ page: 2, limit: 10 });
+      expect(mockPrisma.document.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 }),
+      );
+    });
+
+    it('passa o mesmo where para count que para findMany', async () => {
+      await service.listDocuments({ type: 'contract' as any });
+      expect(mockPrisma.document.count).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ type: 'contract' }) }),
+      );
     });
   });
 });

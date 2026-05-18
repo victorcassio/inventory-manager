@@ -4,6 +4,7 @@ import * as path from 'path';
 import { DocumentStatus, DocumentType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { PaginatedResult } from '../../common/types/paginated-result.interface';
 import { buildContractPdf } from './templates/contract.template';
 import { buildReceiptPdf } from './templates/receipt.template';
 import { buildReturnProofPdf } from './templates/return-proof.template';
@@ -12,6 +13,16 @@ interface DownloadResult {
   path: string;
   filename: string;
   mimeType: string;
+}
+
+interface ListDocumentsQuery {
+  page?: number;
+  limit?: number;
+  type?: DocumentType;
+  status?: DocumentStatus;
+  rentalId?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 @Injectable()
@@ -181,6 +192,45 @@ export class DocumentsService {
     }
 
     return { path: document.path, filename: document.filename, mimeType: 'application/pdf' };
+  }
+
+  // ─── listDocuments ────────────────────────────────────────────────────────
+
+  async listDocuments(query: ListDocumentsQuery): Promise<PaginatedResult<any>> {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (query.type) where.type = query.type;
+    if (query.status) where.status = query.status;
+    if (query.rentalId) where.rentalId = query.rentalId;
+
+    const dateWhere: any = {};
+    if (query.dateFrom) dateWhere.gte = new Date(query.dateFrom);
+    if (query.dateTo) dateWhere.lte = new Date(query.dateTo);
+    if (Object.keys(dateWhere).length > 0) where.createdAt = dateWhere;
+
+    const [data, total] = await Promise.all([
+      this.prisma.document.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          rental: {
+            select: {
+              id: true,
+              contractNumber: true,
+              customer: { select: { id: true, name: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.document.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
