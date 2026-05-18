@@ -63,8 +63,10 @@ export async function buildContractPdf(rental: any): Promise<Buffer> {
       (1000 * 60 * 60 * 24),
     ));
 
+    let computedSubtotal = 0;
     for (const ri of rental.rentalItems ?? []) {
       const lineSubtotal = ri.quantity * Number(ri.unitPrice) * days;
+      computedSubtotal += lineSubtotal;
       doc.text(ri.item?.name ?? '—', 55, y, { width: 180 });
       doc.text(ri.item?.code ?? '—', 240, y, { width: 60 });
       doc.text(String(ri.quantity), 305, y, { width: 50, align: 'right' });
@@ -74,18 +76,22 @@ export async function buildContractPdf(rental: any): Promise<Buffer> {
       drawHLine(doc, y - 2);
     }
 
+    const discount = Number(rental.discount ?? 0);
+    const extraCosts = Number(rental.extraCosts ?? 0);
+    const computedTotal = computedSubtotal - discount + extraCosts;
+
     y += 10;
 
     // Totals
     drawSectionTitle(doc, 'Resumo Financeiro', y);
     y += 24;
-    drawField(doc, 'Subtotal:', formatCurrency(rental.subtotal), 295, y, 100);
-    if (Number(rental.discount) > 0) { y += 16; drawField(doc, 'Desconto:', `- ${formatCurrency(rental.discount)}`, 295, y, 100); }
-    if (Number(rental.extraCosts) > 0) { y += 16; drawField(doc, 'Custos Extras:', formatCurrency(rental.extraCosts), 295, y, 100); }
+    drawField(doc, 'Subtotal:', formatCurrency(computedSubtotal), 295, y, 100);
+    if (discount > 0) { y += 16; drawField(doc, 'Desconto:', `- ${formatCurrency(discount)}`, 295, y, 100); }
+    if (extraCosts > 0) { y += 16; drawField(doc, 'Custos Extras:', formatCurrency(extraCosts), 295, y, 100); }
     if (Number(rental.deposit) > 0) { y += 16; drawField(doc, 'Caução:', formatCurrency(rental.deposit), 295, y, 100); }
     y += 16;
     doc.fontSize(10).font('Helvetica-Bold');
-    drawField(doc, 'TOTAL:', formatCurrency(rental.total), 295, y, 100);
+    drawField(doc, 'TOTAL:', formatCurrency(computedTotal), 295, y, 100);
     doc.fontSize(9).font('Helvetica');
 
     if (rental.notes) {

@@ -336,6 +336,8 @@ async function main() {
         lateFee: '0',
         extraCosts: '0',
         paidAmount: '0',
+        subtotal,
+        total: subtotal,
         notes: opts.notes,
         rentalItems: {
           create: opts.items.map(it => ({
