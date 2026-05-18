@@ -1,14 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Users,
-  Package,
-  FileText,
-  CreditCard,
-  TrendingUp,
-  RotateCcw,
-  LogOut,
-  ClipboardList,
+  LayoutDashboard, Users, Package, FileText, CreditCard,
+  TrendingUp, RotateCcw, LogOut, ClipboardList, Calendar,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -29,6 +22,7 @@ const navItems: NavItem[] = [
   { label: 'Clientes',     href: '/customers',                  icon: Users,           roles: ['admin', 'attendant', 'financial'] },
   { label: 'Estoque',      href: '/inventory/items',            icon: Package,         roles: ['admin', 'attendant', 'financial'] },
   { label: 'Locações',     href: '/rentals',                    icon: ClipboardList,   roles: ['admin', 'attendant', 'financial'] },
+  { label: 'Calendário',   href: '/calendar',                   icon: Calendar,        roles: ['admin', 'attendant'] },
   { label: 'Devoluções',   href: '/rentals?status=returned',    icon: RotateCcw,       roles: ['admin', 'attendant'] },
   { label: 'Pagamentos',   href: '/payments',                   icon: CreditCard,      roles: ['admin', 'financial'] },
   { label: 'Financeiro',   href: '/financial',                  icon: TrendingUp,      roles: ['admin', 'financial'] },

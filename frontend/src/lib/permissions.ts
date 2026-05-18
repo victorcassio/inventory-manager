@@ -33,6 +33,9 @@ export const PERMISSIONS = {
     generateReceipt: ['admin', 'financial'] as UserRole[],
     generateProof: ['admin', 'attendant'] as UserRole[],
   },
+  calendar: {
+    view: ['admin', 'attendant'] as UserRole[],
+  },
 } as const
 
 export function hasPermission(role: UserRole, resource: keyof typeof PERMISSIONS, action: string): boolean {
