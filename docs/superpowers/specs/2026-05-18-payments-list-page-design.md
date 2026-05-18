@@ -29,10 +29,12 @@ O Sidebar já tem o item `Pagamentos` apontando para `/payments` com `roles: ['a
 ```
 GET /payments
   query params: rentalId?, method?, dateFrom?, dateTo?, page, limit
-  include: rental.{ id, contractNumber }, user.{ id, name }
+  include: rental.{ id, contractNumber, customer.{ id, name } }, user.{ id, name }
   roles: admin, financial
   order: paidAt desc
 ```
+
+**Ajuste de backend já aplicado:** `listPayments` agora inclui `rental.customer.{ id, name }` para exibir o nome do cliente na tabela.
 
 O backend **não aceita `contractNumber` diretamente**. Para filtrar por contrato, o frontend deve:
 1. Buscar a locação via `GET /rentals?contractNumber=<valor>` (busca parcial)
@@ -90,16 +92,16 @@ Estados
 const [contractSearch, setContractSearch] = useState('')
 const [rentalIdFilter, setRentalIdFilter] = useState<string | undefined>()
 
-// Ao digitar no campo Contrato:
-const handleContractSearch = async (value: string) => {
-  setContractSearch(value)
-  if (value.length < 2) { setRentalIdFilter(undefined); return }
+// Ao digitar no campo Contrato (com debounce 300ms):
+const handleContractSearch = useDebouncedCallback(async (value: string) => {
+  if (value.length < 2) { setRentalIdFilter(undefined); setPage(1); return }
   const result = await rentalsApi.list({ contractNumber: value, limit: 5 })
-  // Se encontrou exatamente 1 resultado, aplica automaticamente
-  // Se vários, mostra dropdown simples e usuário escolhe
-  setRentalIdFilter(result.data[0]?.id)  // aplica o primeiro match
+  setRentalIdFilter(result.data[0]?.id ?? undefined)  // primeiro match ou undefined
   setPage(1)
-}
+}, 300)
+
+// Ao limpar o campo:
+// setContractSearch('') → setRentalIdFilter(undefined) → setPage(1)
 ```
 
 Para simplificar: aplicar sempre o **primeiro resultado** da busca de contratos.
@@ -170,7 +172,9 @@ export function usePayments(params?: {
 ## RBAC
 
 - `admin` e `financial`: acesso total
-- `attendant`: não acessa `/payments` — o Sidebar já filtra o link; rota protegida implicitamente (backend retorna 403)
+- `attendant`: não acessa `/payments` — o Sidebar já filtra o link; a rota no router deve ser protegida com `roles: ['admin', 'financial']` igual às outras rotas restritas
+
+**Proteção de rota no frontend:** adicionar verificação de role no `ProtectedRoute` ou usar o mesmo padrão das rotas do módulo financeiro (que usam `canAccess` via permissions).
 
 ---
 
@@ -179,10 +183,13 @@ export function usePayments(params?: {
 `src/tests/payments/PaymentsListPage.test.tsx`:
 1. Renderiza loading state
 2. Renderiza error state com retry
-3. Exibe lista de pagamentos na tabela
-4. Exibe contrato como link clicável
+3. Exibe lista de pagamentos na tabela (data, contrato, cliente, método, valor)
+4. Exibe contrato como link clicável para `/rentals/:rentalId`
 5. EmptyState quando sem pagamentos
 6. Botão anterior/próxima aparece quando total > limit
+7. Aplica filtro de método — `usePayments` chamado com `method` correto
+8. Aplica filtro de período — `usePayments` chamado com `dateFrom`/`dateTo`
+9. Ao limpar campo de contrato, `rentalIdFilter` é limpo e página volta a 1
 
 ---
 

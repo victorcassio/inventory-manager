@@ -179,7 +179,13 @@ export class PaymentsService {
         take: limit,
         orderBy: { paidAt: 'desc' },
         include: {
-          rental: { select: { id: true, contractNumber: true } },
+          rental: {
+            select: {
+              id: true,
+              contractNumber: true,
+              customer: { select: { id: true, name: true } },
+            },
+          },
           user: { select: { id: true, name: true } },
         },
       }),
