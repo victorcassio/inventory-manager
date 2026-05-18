@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { ArrowLeft, Loader2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
@@ -180,7 +181,7 @@ export function FinancialNewPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Data do lançamento *</FormLabel>
-                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormControl><DateInput {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

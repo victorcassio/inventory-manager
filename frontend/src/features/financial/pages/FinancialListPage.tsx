@@ -8,6 +8,7 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -113,11 +114,11 @@ export function FinancialListPage() {
         <div className="flex gap-4 items-end flex-wrap">
           <div className="space-y-1">
             <Label htmlFor="dateFrom">De</Label>
-            <Input id="dateFrom" type="date" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(1) }} className="w-40" />
+            <DateInput id="dateFrom" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(1) }} className="w-40" />
           </div>
           <div className="space-y-1">
             <Label htmlFor="dateTo">Até</Label>
-            <Input id="dateTo" type="date" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(1) }} className="w-40" />
+            <DateInput id="dateTo" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(1) }} className="w-40" />
           </div>
         </div>
       )}

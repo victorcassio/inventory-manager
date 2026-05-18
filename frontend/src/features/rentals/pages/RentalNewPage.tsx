@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -156,7 +157,7 @@ export function RentalNewPage() {
                       <FormItem>
                         <FormLabel>Início *</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} />
+                          <DateInput {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -169,7 +170,7 @@ export function RentalNewPage() {
                       <FormItem>
                         <FormLabel>Devolução *</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} />
+                          <DateInput {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

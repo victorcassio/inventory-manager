@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/feedback/ErrorState'
 import { StatusBadge } from '@/components/feedback/StatusBadge'
@@ -104,7 +105,7 @@ export function CreateReturnPage() {
                         <FormItem>
                           <FormLabel>Data de devolução</FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} />
+                            <DateInput {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
