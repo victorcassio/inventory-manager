@@ -1,7 +1,18 @@
 import api from './client'
-import type { Document } from '@/types'
+import type { Document, PaginatedResponse } from '@/types'
 
 export const documentsApi = {
+  list: (params?: {
+    type?: string
+    status?: string
+    rentalId?: string
+    dateFrom?: string
+    dateTo?: string
+    page?: number
+    limit?: number
+  }) =>
+    api.get<PaginatedResponse<Document>>('/documents', { params }).then(r => r.data),
+
   getByRental: (rentalId: string) =>
     api.get<Document[]>(`/rentals/${rentalId}/documents`).then(r => r.data),
 

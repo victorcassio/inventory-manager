@@ -180,6 +180,7 @@ export interface Document {
   returnId?: string | null
   userId?: string | null
   createdAt: string
+  rental?: { id: string; contractNumber: string; customer: { id: string; name: string } } | null
 }
 
 export type FinancialTransactionType = 'income' | 'expense'

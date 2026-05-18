@@ -5,7 +5,23 @@ import type { AxiosError } from 'axios'
 
 export const documentKeys = {
   all: ['documents'] as const,
+  list: (params?: object) => [...documentKeys.all, 'list', params] as const,
   byRental: (rentalId: string) => [...documentKeys.all, 'rental', rentalId] as const,
+}
+
+export function useDocuments(params?: {
+  type?: string
+  status?: string
+  rentalId?: string
+  dateFrom?: string
+  dateTo?: string
+  page?: number
+  limit?: number
+}) {
+  return useQuery({
+    queryKey: documentKeys.list(params),
+    queryFn: () => documentsApi.list(params),
+  })
 }
 
 export function useDocumentsByRental(rentalId: string) {
