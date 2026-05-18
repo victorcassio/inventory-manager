@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { PageLoader } from './PageLoader'
 import { cn } from '@/lib/utils'
 
 const PAGE_TITLES: Record<string, string> = {
@@ -54,7 +55,9 @@ export function AppLayout() {
           onMenuClick={() => setSidebarVisible(v => !v)}
         />
         <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

@@ -1,31 +1,78 @@
+import { lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AuthLayout } from '@/components/layout/AuthLayout'
-import { LoginPage } from '@/pages/LoginPage'
-import { DashboardPage } from '@/pages/DashboardPage'
-import { NotFoundPage } from '@/pages/NotFoundPage'
+
+// ─── Eager (pequenas/sempre necessárias) ──────────────────────────────────────
+import { LoginPage }     from '@/pages/LoginPage'
+import { NotFoundPage }  from '@/pages/NotFoundPage'
 import { ForbiddenPage } from '@/pages/ForbiddenPage'
-import { CustomersListPage } from '@/features/customers/pages/CustomersListPage'
-import { CustomerNewPage } from '@/features/customers/pages/CustomerNewPage'
-import { CustomerDetailPage } from '@/features/customers/pages/CustomerDetailPage'
-import { CustomerEditPage } from '@/features/customers/pages/CustomerEditPage'
-import { ItemsListPage } from '@/features/inventory/pages/ItemsListPage'
-import { ItemNewPage } from '@/features/inventory/pages/ItemNewPage'
-import { ItemDetailPage } from '@/features/inventory/pages/ItemDetailPage'
-import { CategoriesPage } from '@/features/inventory/pages/CategoriesPage'
-import { RentalsListPage } from '@/features/rentals/pages/RentalsListPage'
-import { RentalNewPage } from '@/features/rentals/pages/RentalNewPage'
-import { RentalDetailPage } from '@/features/rentals/pages/RentalDetailPage'
-import { CreateReturnPage } from '@/features/returns/pages/CreateReturnPage'
-import { CreatePaymentPage } from '@/features/payments/pages/CreatePaymentPage'
-import { PaymentsListPage } from '@/features/payments/pages/PaymentsListPage'
-import { FinancialListPage } from '@/features/financial/pages/FinancialListPage'
-import { FinancialNewPage } from '@/features/financial/pages/FinancialNewPage'
-import { FinancialDetailPage } from '@/features/financial/pages/FinancialDetailPage'
-import { FinancialEditPage } from '@/features/financial/pages/FinancialEditPage'
-import { DocumentsListPage } from '@/features/documents/pages/DocumentsListPage'
-import { CalendarPage } from '@/features/calendar/pages/CalendarPage'
+
+// ─── Lazy (feature pages — carregadas sob demanda) ───────────────────────────
+const DashboardPage = lazy(() =>
+  import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
+)
+const CustomersListPage = lazy(() =>
+  import('@/features/customers/pages/CustomersListPage').then((m) => ({ default: m.CustomersListPage }))
+)
+const CustomerNewPage = lazy(() =>
+  import('@/features/customers/pages/CustomerNewPage').then((m) => ({ default: m.CustomerNewPage }))
+)
+const CustomerDetailPage = lazy(() =>
+  import('@/features/customers/pages/CustomerDetailPage').then((m) => ({ default: m.CustomerDetailPage }))
+)
+const CustomerEditPage = lazy(() =>
+  import('@/features/customers/pages/CustomerEditPage').then((m) => ({ default: m.CustomerEditPage }))
+)
+const ItemsListPage = lazy(() =>
+  import('@/features/inventory/pages/ItemsListPage').then((m) => ({ default: m.ItemsListPage }))
+)
+const ItemNewPage = lazy(() =>
+  import('@/features/inventory/pages/ItemNewPage').then((m) => ({ default: m.ItemNewPage }))
+)
+const ItemDetailPage = lazy(() =>
+  import('@/features/inventory/pages/ItemDetailPage').then((m) => ({ default: m.ItemDetailPage }))
+)
+const CategoriesPage = lazy(() =>
+  import('@/features/inventory/pages/CategoriesPage').then((m) => ({ default: m.CategoriesPage }))
+)
+const RentalsListPage = lazy(() =>
+  import('@/features/rentals/pages/RentalsListPage').then((m) => ({ default: m.RentalsListPage }))
+)
+const RentalNewPage = lazy(() =>
+  import('@/features/rentals/pages/RentalNewPage').then((m) => ({ default: m.RentalNewPage }))
+)
+const RentalDetailPage = lazy(() =>
+  import('@/features/rentals/pages/RentalDetailPage').then((m) => ({ default: m.RentalDetailPage }))
+)
+const CreateReturnPage = lazy(() =>
+  import('@/features/returns/pages/CreateReturnPage').then((m) => ({ default: m.CreateReturnPage }))
+)
+const CreatePaymentPage = lazy(() =>
+  import('@/features/payments/pages/CreatePaymentPage').then((m) => ({ default: m.CreatePaymentPage }))
+)
+const PaymentsListPage = lazy(() =>
+  import('@/features/payments/pages/PaymentsListPage').then((m) => ({ default: m.PaymentsListPage }))
+)
+const FinancialListPage = lazy(() =>
+  import('@/features/financial/pages/FinancialListPage').then((m) => ({ default: m.FinancialListPage }))
+)
+const FinancialNewPage = lazy(() =>
+  import('@/features/financial/pages/FinancialNewPage').then((m) => ({ default: m.FinancialNewPage }))
+)
+const FinancialDetailPage = lazy(() =>
+  import('@/features/financial/pages/FinancialDetailPage').then((m) => ({ default: m.FinancialDetailPage }))
+)
+const FinancialEditPage = lazy(() =>
+  import('@/features/financial/pages/FinancialEditPage').then((m) => ({ default: m.FinancialEditPage }))
+)
+const DocumentsListPage = lazy(() =>
+  import('@/features/documents/pages/DocumentsListPage').then((m) => ({ default: m.DocumentsListPage }))
+)
+const CalendarPage = lazy(() =>
+  import('@/features/calendar/pages/CalendarPage').then((m) => ({ default: m.CalendarPage }))
+)
 
 export function AppRoutes() {
   return (
