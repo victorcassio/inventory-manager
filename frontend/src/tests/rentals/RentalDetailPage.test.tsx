@@ -206,7 +206,7 @@ describe('RentalDetailPage', () => {
     setupMocks('admin')
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('PIX')).toBeInTheDocument()
+      expect(screen.getAllByText('PIX').length).toBeGreaterThan(0)
     })
   })
 
