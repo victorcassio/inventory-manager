@@ -105,8 +105,8 @@ describe('DocumentsListPage', () => {
       refetch: vi.fn(),
     })
     renderPage()
-    await waitFor(() => screen.getByTitle('Baixar PDF'))
-    await user.click(screen.getByTitle('Baixar PDF'))
+    await waitFor(() => screen.getAllByTitle('Baixar PDF').length > 0)
+    await user.click(screen.getAllByTitle('Baixar PDF')[0])
     expect(mockMutate).toHaveBeenCalledWith({ documentId: 'doc-1', filename: 'contract-123.pdf' })
   })
 
@@ -148,5 +148,26 @@ describe('DocumentsListPage', () => {
     })
     renderPage()
     await waitFor(() => expect(screen.getByRole('button', { name: /próxima/i })).toBeInTheDocument())
+  })
+
+  it('mostra botão de filtros', async () => {
+    setupMocks()
+    renderPage()
+    await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      expect(btns.some(b => b.textContent?.includes('Filtros'))).toBe(true)
+    })
+  })
+
+  it('mostra range de paginação quando total > limit', async () => {
+    mockUseDownload.mockReturnValue({ mutate: vi.fn(), isPending: false })
+    mockUseDocuments.mockReturnValue({
+      data: { data: [mockDoc], total: 25, page: 1, limit: 20 },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    })
+    renderPage()
+    await waitFor(() => expect(screen.getByText(/Mostrando 1–20 de 25/)).toBeInTheDocument())
   })
 })
