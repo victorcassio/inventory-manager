@@ -66,7 +66,7 @@ describe('CustomersListPage', () => {
     mockUseCustomers.mockReturnValue({ isLoading: false, isError: false, data: mockData, refetch: vi.fn() })
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('João da Silva')).toBeInTheDocument()
+      expect(screen.getAllByText('João da Silva').length).toBeGreaterThan(0)
     })
   })
 
@@ -85,5 +85,15 @@ describe('CustomersListPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Erro')).toBeInTheDocument()
     })
+  })
+
+  it('mostra range de paginação quando total > limit', async () => {
+    mockUseAuthStore.mockReturnValue({ user: { role: 'admin' } })
+    mockUseCustomers.mockReturnValue({
+      isLoading: false, isError: false, refetch: vi.fn(),
+      data: { data: [mockCustomer], total: 25, page: 1, limit: 20 },
+    })
+    render(<MemoryRouter><CustomersListPage /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByText(/Mostrando 1–20 de 25/)).toBeInTheDocument())
   })
 })
