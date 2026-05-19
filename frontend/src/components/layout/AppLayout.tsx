@@ -1,4 +1,5 @@
-import { Suspense, useState } from 'react'
+// src/components/layout/AppLayout.tsx
+import { Suspense, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
@@ -32,20 +33,40 @@ function getPageTitle(pathname: string): string {
 }
 
 export function AppLayout() {
-  const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [sidebarVisible, setSidebarVisible] = useState(() => window.innerWidth >= 768)
   const location = useLocation()
   const title = getPageTitle(location.pathname)
 
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768
+    if (isMobile && sidebarVisible) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [sidebarVisible])
+
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar — toggled by ☰ button */}
+      {/* Backdrop — mobile only, fecha sidebar ao tocar fora */}
+      {sidebarVisible && (
+        <div
+          className="fixed inset-0 z-10 bg-black/40 md:hidden"
+          onClick={() => setSidebarVisible(false)}
+        />
+      )}
+
+      {/* Sidebar — fixed no mobile (overlay), relative no desktop (flex) */}
       <div
         className={cn(
-          'flex flex-shrink-0 transition-all duration-200',
+          'flex-shrink-0 transition-all duration-200',
+          'fixed inset-y-0 left-0 z-20 flex',
+          'md:relative md:z-auto',
           sidebarVisible ? 'w-64' : 'w-0 overflow-hidden',
         )}
       >
-        <Sidebar />
+        <Sidebar onClose={() => setSidebarVisible(false)} />
       </div>
 
       {/* Main content */}
