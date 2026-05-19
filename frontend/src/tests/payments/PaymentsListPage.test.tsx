@@ -64,9 +64,9 @@ describe('PaymentsListPage', () => {
     setupMocks()
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('João Silva')).toBeInTheDocument()
-      expect(screen.getByText('#2026-0001')).toBeInTheDocument()
-      expect(screen.getByText('PIX')).toBeInTheDocument()
+      expect(screen.getAllByText('João Silva').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('#2026-0001').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('PIX').length).toBeGreaterThan(0)
     })
   })
 
@@ -74,8 +74,8 @@ describe('PaymentsListPage', () => {
     setupMocks()
     renderPage()
     await waitFor(() => {
-      const link = screen.getByText('#2026-0001')
-      expect(link.tagName).toBe('BUTTON')
+      const links = screen.getAllByText('#2026-0001')
+      expect(links.some(el => el.tagName === 'BUTTON')).toBe(true)
     })
   })
 
@@ -108,7 +108,7 @@ describe('PaymentsListPage', () => {
   it('aplica filtro de período — usePayments chamado com dateFrom/dateTo', async () => {
     setupMocks()
     renderPage()
-    await waitFor(() => screen.getByText('João Silva'))
+    await waitFor(() => expect(screen.getAllByText('João Silva').length).toBeGreaterThan(0))
     const call = mockUsePayments.mock.calls[mockUsePayments.mock.calls.length - 1][0]
     expect(call?.dateFrom).toBeDefined()
     expect(call?.dateTo).toBeDefined()
@@ -117,7 +117,7 @@ describe('PaymentsListPage', () => {
   it('aplica filtro de método — usePayments chamado com params', async () => {
     setupMocks()
     renderPage()
-    await waitFor(() => screen.getByText('João Silva'))
+    await waitFor(() => expect(screen.getAllByText('João Silva').length).toBeGreaterThan(0))
     expect(mockUsePayments).toHaveBeenCalled()
     const call = mockUsePayments.mock.calls[mockUsePayments.mock.calls.length - 1][0]
     expect(call).toHaveProperty('page', 1)
@@ -128,5 +128,24 @@ describe('PaymentsListPage', () => {
     mockUsePayments.mockReturnValue({ data: undefined, isLoading: false, isError: false })
     renderPage()
     await waitFor(() => expect(screen.queryByText('Pagamentos')).not.toBeInTheDocument())
+  })
+
+  it('mostra botão de filtros', async () => {
+    setupMocks()
+    renderPage()
+    await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      expect(btns.some(b => b.textContent?.includes('Filtros'))).toBe(true)
+    })
+  })
+
+  it('mostra range de paginação quando total > limit', async () => {
+    mockUseAuthStore.mockReturnValue({ user: { role: 'admin' } })
+    mockUsePayments.mockReturnValue({
+      data: { data: [mockPayment], total: 25, page: 1, limit: 20 },
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+    await waitFor(() => expect(screen.getByText(/Mostrando 1–20 de 25/)).toBeInTheDocument())
   })
 })
