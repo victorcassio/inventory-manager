@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronDown, ChevronUp, SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -6,7 +7,7 @@ interface FilterPanelProps {
   activeCount: number
   summary?: string
   onClear: () => void
-  children: React.ReactNode
+  children: ReactNode
 }
 
 export function FilterPanel({ activeCount, summary, onClear, children }: FilterPanelProps) {
