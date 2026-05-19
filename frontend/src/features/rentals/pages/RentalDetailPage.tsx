@@ -78,7 +78,7 @@ export function RentalDetailPage() {
         </Button>
         <h2 className="text-2xl font-bold">Locação #{rental.contractNumber}</h2>
         <StatusBadge status={rental.computedStatus as ComputedRentalStatus} />
-        <div className="ml-auto flex gap-2">
+        <div className="flex flex-wrap gap-2 md:ml-auto">
           {canRegisterReturn && (
             <Button size="sm" variant="outline" onClick={() => navigate(`/rentals/${id}/returns/new`)}>
               <RotateCcw className="mr-2 h-4 w-4" />
