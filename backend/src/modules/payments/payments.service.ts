@@ -169,7 +169,11 @@ export class PaymentsService {
 
     const dateWhere: any = {};
     if (query.dateFrom) dateWhere.gte = new Date(query.dateFrom);
-    if (query.dateTo) dateWhere.lte = new Date(query.dateTo);
+    if (query.dateTo) {
+      const end = new Date(query.dateTo);
+      end.setDate(end.getDate() + 1);
+      dateWhere.lt = end;
+    }
     if (Object.keys(dateWhere).length > 0) where.paidAt = dateWhere;
 
     const [data, total] = await Promise.all([
