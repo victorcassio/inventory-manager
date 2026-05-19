@@ -34,9 +34,9 @@ function renderTable(docs: Document[]) {
 describe('DocumentsTable', () => {
   it('renders existing documents', () => {
     renderTable([baseDoc])
-    expect(screen.getByText('Contrato')).toBeInTheDocument()
+    expect(screen.getAllByText('Contrato').length).toBeGreaterThan(0)
     expect(screen.getByText('contract-123.pdf')).toBeInTheDocument()
-    expect(screen.getByText('Gerado')).toBeInTheDocument()
+    expect(screen.getAllByText('Gerado').length).toBeGreaterThan(0)
   })
 
   it('shows EmptyState when no documents', () => {
@@ -55,7 +55,7 @@ describe('DocumentsTable', () => {
       </MemoryRouter>,
     )
 
-    await user.click(screen.getByTitle('Baixar PDF'))
+    await user.click(screen.getAllByTitle('Baixar PDF')[0])
 
     expect(mockMutate).toHaveBeenCalledWith({
       documentId: 'doc-1',
@@ -65,16 +65,22 @@ describe('DocumentsTable', () => {
 
   it('shows correct label for contract type', () => {
     renderTable([{ ...baseDoc, type: 'contract' }])
-    expect(screen.getByText('Contrato')).toBeInTheDocument()
+    expect(screen.getAllByText('Contrato').length).toBeGreaterThan(0)
   })
 
   it('shows correct label for receipt type', () => {
     renderTable([{ ...baseDoc, id: 'doc-2', type: 'receipt', filename: 'receipt-1.pdf' }])
-    expect(screen.getByText('Recibo')).toBeInTheDocument()
+    expect(screen.getAllByText('Recibo').length).toBeGreaterThan(0)
   })
 
   it('shows correct label for return_proof type', () => {
     renderTable([{ ...baseDoc, id: 'doc-3', type: 'return_proof', filename: 'proof-1.pdf' }])
-    expect(screen.getByText('Comprovante de Devolução')).toBeInTheDocument()
+    expect(screen.getAllByText('Comprovante de Devolução').length).toBeGreaterThan(0)
+  })
+
+  it('exibe tipo e data na lista mobile', () => {
+    renderTable([baseDoc])
+    // 'Contrato' aparece em desktop e mobile → pelo menos 1 ocorrência
+    expect(screen.getAllByText('Contrato').length).toBeGreaterThan(0)
   })
 })
