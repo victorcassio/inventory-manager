@@ -4,7 +4,8 @@ import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   subMonths, startOfYear, endOfYear,
 } from 'date-fns'
-import { Plus } from 'lucide-react'
+import { ChevronRight, Plus } from 'lucide-react'
+import { FilterPanel } from '@/components/filters/FilterPanel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -65,6 +66,25 @@ export function FinancialListPage() {
   const [category, setCategory] = useState('')
   const [origin,   setOrigin]   = useState('')
 
+  const activeCount = [
+    preset !== 'this_month',
+    !!type,
+    !!category,
+    !!origin,
+  ].filter(Boolean).length
+
+  const filterSummary = [
+    preset !== 'this_month' ? PRESET_LABELS[preset] : null,
+    type ? (type === 'income' ? 'Entrada' : 'Saída') : null,
+    category ? CATEGORY_LABELS[category as FinancialTransactionCategory] : null,
+    origin ? ORIGIN_LABELS[origin as FinancialTransactionOrigin] : null,
+  ].filter(Boolean).join(' · ')
+
+  const handleClear = () => {
+    setPreset('this_month'); setCustomFrom(''); setCustomTo('')
+    setType(''); setCategory(''); setOrigin(''); setPage(1)
+  }
+
   const canManage = user ? PERMISSIONS.financial.manage.includes(user.role) : false
 
   const periodDates =
@@ -100,67 +120,78 @@ export function FinancialListPage() {
         )}
       </div>
 
-      {/* Period presets */}
-      <div className="flex flex-wrap gap-2">
-        {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map(p => (
-          <Button key={p} variant={preset === p ? 'default' : 'outline'} size="sm" onClick={() => handlePreset(p)}>
-            {PRESET_LABELS[p]}
-          </Button>
-        ))}
-      </div>
+      <FilterPanel activeCount={activeCount} summary={filterSummary} onClear={handleClear}>
+        {/* Period presets */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap">
+          {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map(p => (
+            <Button key={p} variant={preset === p ? 'default' : 'outline'} size="sm"
+              className="w-full md:w-auto" onClick={() => handlePreset(p)}>
+              {PRESET_LABELS[p]}
+            </Button>
+          ))}
+        </div>
 
-      {/* Custom date range */}
-      {preset === 'custom' && (
-        <div className="flex gap-4 items-end flex-wrap">
+        {preset === 'custom' && (
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="dateFrom">De</Label>
+              <DateInput id="dateFrom" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(1) }} className="w-full md:w-40" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="dateTo">Até</Label>
+              <DateInput id="dateTo" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(1) }} className="w-full md:w-40" />
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:gap-4">
           <div className="space-y-1">
-            <Label htmlFor="dateFrom">De</Label>
-            <DateInput id="dateFrom" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(1) }} className="w-40" />
+            <Label>Tipo</Label>
+            <Select value={type || 'all'} onValueChange={v => { setType(v === 'all' ? '' : v); setPage(1) }}>
+              <SelectTrigger className="w-full md:w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="income">Entrada</SelectItem>
+                <SelectItem value="expense">Saída</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="dateTo">Até</Label>
-            <DateInput id="dateTo" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(1) }} className="w-40" />
+            <Label>Categoria</Label>
+            <Select value={category || 'all'} onValueChange={v => { setCategory(v === 'all' ? '' : v); setPage(1) }}>
+              <SelectTrigger className="w-full md:w-52"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {Object.entries(CATEGORY_LABELS).map(([k, label]) => (
+                  <SelectItem key={k} value={k}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          <div className="space-y-1">
+            <Label>Origem</Label>
+            <Select value={origin || 'all'} onValueChange={v => { setOrigin(v === 'all' ? '' : v); setPage(1) }}>
+              <SelectTrigger className="w-full md:w-36"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {Object.entries(ORIGIN_LABELS).map(([k, label]) => (
+                  <SelectItem key={k} value={k}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </FilterPanel>
+
+      {/* Active chips — mobile only */}
+      {activeCount > 0 && (
+        <div className="flex flex-wrap gap-1 md:hidden">
+          {preset !== 'this_month' && <Badge variant="secondary">{PRESET_LABELS[preset]}</Badge>}
+          {type && <Badge variant="secondary">{type === 'income' ? 'Entrada' : 'Saída'}</Badge>}
+          {category && <Badge variant="secondary">{CATEGORY_LABELS[category as FinancialTransactionCategory]}</Badge>}
+          {origin && <Badge variant="secondary">{ORIGIN_LABELS[origin as FinancialTransactionOrigin]}</Badge>}
         </div>
       )}
-
-      {/* Type / Category / Origin filters */}
-      <div className="flex gap-4 flex-wrap">
-        <div className="space-y-1">
-          <Label>Tipo</Label>
-          <Select value={type || 'all'} onValueChange={v => { setType(v === 'all' ? '' : v); setPage(1) }}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="income">Entrada</SelectItem>
-              <SelectItem value="expense">Saída</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label>Categoria</Label>
-          <Select value={category || 'all'} onValueChange={v => { setCategory(v === 'all' ? '' : v); setPage(1) }}>
-            <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              {Object.entries(CATEGORY_LABELS).map(([k, label]) => (
-                <SelectItem key={k} value={k}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label>Origem</Label>
-          <Select value={origin || 'all'} onValueChange={v => { setOrigin(v === 'all' ? '' : v); setPage(1) }}>
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              {Object.entries(ORIGIN_LABELS).map(([k, label]) => (
-                <SelectItem key={k} value={k}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
       {/* Summary cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -211,68 +242,99 @@ export function FinancialListPage() {
               action={canManage ? { label: 'Novo Lançamento', onClick: () => navigate('/financial/transactions/new') } : undefined}
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Origem</TableHead>
-                  <TableHead>Locação</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Desktop */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Origem</TableHead>
+                      <TableHead>Locação</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.data.map(txn => (
+                      <TableRow
+                        key={txn.id}
+                        className={`cursor-pointer ${txn.isVoided ? 'opacity-50' : ''}`}
+                        onClick={() => navigate(`/financial/transactions/${txn.id}`)}
+                      >
+                        <TableCell className="text-muted-foreground text-sm">{formatDate(txn.date)}</TableCell>
+                        <TableCell className={txn.isVoided ? 'line-through' : ''}>{txn.description}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{CATEGORY_LABELS[txn.category] ?? txn.category}</Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {ORIGIN_LABELS[txn.origin] ?? txn.origin}
+                        </TableCell>
+                        <TableCell>
+                          {txn.rental ? (
+                            <span
+                              className="text-primary font-mono text-xs hover:underline"
+                              onClick={e => { e.stopPropagation(); navigate(`/rentals/${txn.rentalId}`) }}
+                            >
+                              #{txn.rental.contractNumber}
+                            </span>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-semibold ${
+                            txn.isVoided
+                              ? 'line-through text-muted-foreground'
+                              : txn.type === 'income' ? 'text-green-600' : 'text-red-600'
+                          }`}
+                        >
+                          {txn.type === 'income' ? '+' : '−'}{formatCurrency(txn.amount)}
+                        </TableCell>
+                        <TableCell>
+                          {txn.isVoided ? (
+                            <Badge variant="destructive" className="text-xs">anulado</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">›</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile */}
+              <div className="md:hidden divide-y rounded-md border">
                 {data.data.map(txn => (
-                  <TableRow
+                  <div
                     key={txn.id}
-                    className={`cursor-pointer ${txn.isVoided ? 'opacity-50' : ''}`}
+                    className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/50 ${txn.isVoided ? 'opacity-50' : ''}`}
                     onClick={() => navigate(`/financial/transactions/${txn.id}`)}
                   >
-                    <TableCell className="text-muted-foreground text-sm">{formatDate(txn.date)}</TableCell>
-                    <TableCell className={txn.isVoided ? 'line-through' : ''}>{txn.description}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{CATEGORY_LABELS[txn.category] ?? txn.category}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {ORIGIN_LABELS[txn.origin] ?? txn.origin}
-                    </TableCell>
-                    <TableCell>
-                      {txn.rental ? (
-                        <span
-                          className="text-primary font-mono text-xs hover:underline"
-                          onClick={e => { e.stopPropagation(); navigate(`/rentals/${txn.rentalId}`) }}
-                        >
-                          #{txn.rental.contractNumber}
-                        </span>
-                      ) : '—'}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right font-semibold ${
-                        txn.isVoided
-                          ? 'line-through text-muted-foreground'
-                          : txn.type === 'income' ? 'text-green-600' : 'text-red-600'
-                      }`}
-                    >
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium text-sm truncate ${txn.isVoided ? 'line-through' : ''}`}>
+                        {txn.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(txn.date)} · {CATEGORY_LABELS[txn.category] ?? txn.category}
+                      </p>
+                    </div>
+                    <span className={`text-sm font-semibold shrink-0 ${txn.isVoided ? 'line-through text-muted-foreground' : txn.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                       {txn.type === 'income' ? '+' : '−'}{formatCurrency(txn.amount)}
-                    </TableCell>
-                    <TableCell>
-                      {txn.isVoided ? (
-                        <Badge variant="destructive" className="text-xs">anulado</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">›</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
 
           {data.total > limit && (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">{data.total} lançamentos no período</p>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {(page - 1) * limit + 1}–{Math.min(page * limit, data.total)} de {data.total}
+              </p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</Button>
                 <Button variant="outline" size="sm" disabled={page * limit >= data.total} onClick={() => setPage(page + 1)}>Próxima</Button>

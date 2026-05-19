@@ -81,7 +81,7 @@ describe('FinancialListPage', () => {
     setupMocks()
     renderPage()
     await waitFor(() =>
-      expect(screen.getByText('Pagamento contrato 2026-0042')).toBeInTheDocument(),
+      expect(screen.getAllByText('Pagamento contrato 2026-0042').length).toBeGreaterThan(0),
     )
   })
 
@@ -116,5 +116,28 @@ describe('FinancialListPage', () => {
     })
     renderPage()
     await waitFor(() => expect(screen.getByText('anulado')).toBeInTheDocument())
+  })
+
+  it('mostra botão de filtros', async () => {
+    setupMocks()
+    renderPage()
+    await waitFor(() => {
+      const btns = screen.getAllByRole('button')
+      expect(btns.some(b => b.textContent?.includes('Filtros'))).toBe(true)
+    })
+  })
+
+  it('mostra range de paginação quando total > limit', async () => {
+    mockUseAuthStore.mockReturnValue({ user: { role: 'admin' } })
+    mockUseFinancialTransactions.mockReturnValue({
+      data: { data: [mockTransaction], total: 25, page: 1, limit: 20 },
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    mockUseFinancialSummary.mockReturnValue({
+      data: { totalIncome: 0, totalExpense: 0, balance: 0, voidedCount: 0 },
+      isLoading: false, isError: false,
+    })
+    renderPage()
+    await waitFor(() => expect(screen.getByText(/Mostrando 1–20 de 25/)).toBeInTheDocument())
   })
 })
