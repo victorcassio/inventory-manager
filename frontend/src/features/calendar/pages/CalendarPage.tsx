@@ -29,19 +29,7 @@ export function CalendarPage() {
 
   const [isMobile, setIsMobile] = useState(getIsMobile)
   const [calendarTitle, setCalendarTitle] = useState('')
-  const [currentView, setCurrentView] = useState(() =>
-    getIsMobile() ? 'listMonth' : 'dayGridMonth'
-  )
-
-  // Change FullCalendar view when breakpoint crosses (after initial mount)
-  const prevIsMobileRef = useRef(isMobile)
-  useEffect(() => {
-    if (prevIsMobileRef.current === isMobile) return
-    prevIsMobileRef.current = isMobile
-    const newView = isMobile ? 'listMonth' : 'dayGridMonth'
-    calendarRef.current?.getApi().changeView(newView)
-    setCurrentView(newView)
-  }, [isMobile])
+  const [currentView, setCurrentView] = useState('dayGridMonth')
 
   useEffect(() => {
     const handleResize = () => setIsMobile(getIsMobile())
@@ -158,7 +146,7 @@ export function CalendarPage() {
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, listPlugin]}
-          initialView={isMobile ? 'listMonth' : 'dayGridMonth'}
+          initialView="dayGridMonth"
           locale={ptBrLocale}
           firstDay={1}
           headerToolbar={isMobile ? false : {

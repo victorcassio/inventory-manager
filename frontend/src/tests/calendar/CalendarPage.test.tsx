@@ -140,12 +140,12 @@ describe('CalendarPage', () => {
 
   // --- Mobile (window.innerWidth = 375) ---
 
-  it('mobile: initialView é listMonth', async () => {
+  it('mobile: initialView é dayGridMonth (mês é o padrão em todos os dispositivos)', async () => {
     setViewport(375)
     setupMocks()
     renderPage()
     await waitFor(() =>
-      expect(screen.getByTestId('fullcalendar')).toHaveAttribute('data-initial-view', 'listMonth')
+      expect(screen.getByTestId('fullcalendar')).toHaveAttribute('data-initial-view', 'dayGridMonth')
     )
   })
 
