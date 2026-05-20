@@ -16,8 +16,12 @@ async function bootstrap() {
 
   app.use(helmet());
 
+  const allowedOrigins = [frontendUrl, 'http://localhost:5173', 'http://localhost:5174'];
   app.enableCors({
-    origin: frontendUrl,
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
