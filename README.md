@@ -173,15 +173,70 @@ Projetado para empresas que trabalham com aluguel de andaimes, ferramentas, gera
 
 ## Screenshots
 
-> *Adicione capturas de tela do sistema aqui.*
+### Dashboard
 
-| Dashboard | Locações |
-|---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Locações](docs/screenshots/rentals.png) |
+![Dashboard — KPIs](docs/screenshots/dashboard-kpis.png)
+*KPIs financeiros, locações por status e estoque em tempo real*
 
-| Financeiro | Calendário |
+![Dashboard — Gráficos](docs/screenshots/dashboard-charts.png)
+*Receita × Despesas (6 meses), receita acumulada, locações por status e ocupação do estoque*
+
+![Dashboard — Listas operacionais](docs/screenshots/dashboard-lists.png)
+*Pagamentos recentes, próximas devoluções e devoluções atrasadas*
+
+---
+
+### Clientes e Estoque
+
+| Clientes | Novo Cliente |
 |---|---|
-| ![Financeiro](docs/screenshots/financial.png) | ![Calendário](docs/screenshots/calendar.png) |
+| ![Clientes](docs/screenshots/customers.png) | ![Novo Cliente](docs/screenshots/customer-form.png) |
+
+| Estoque | Novo Item |
+|---|---|
+| ![Estoque](docs/screenshots/inventory.png) | ![Novo Item](docs/screenshots/inventory-form.png) |
+
+---
+
+### Locações e Pagamentos
+
+![Locações](docs/screenshots/rentals.png)
+*Listagem com status computado: Ativo, Vencido, Devolvido, Cancelado*
+
+| Nova Locação | Pagamentos |
+|---|---|
+| ![Nova Locação](docs/screenshots/rental-form.png) | ![Pagamentos](docs/screenshots/payments.png) |
+
+---
+
+### Financeiro
+
+![Financeiro](docs/screenshots/financial.png)
+*Lançamentos com KPIs de entradas, saídas, saldo e filtros por período*
+
+![Novo Lançamento](docs/screenshots/financial-form.png)
+*Formulário de lançamento manual com seletor visual de tipo (entrada/saída)*
+
+---
+
+### Documentos e PDFs
+
+![Documentos](docs/screenshots/documents.png)
+*Listagem global de contratos, recibos e comprovantes com download direto*
+
+| Contrato de Locação (PDF) | Recibo de Pagamento (PDF) |
+|---|---|
+| ![PDF Contrato](docs/screenshots/pdf-contract.png) | ![PDF Recibo](docs/screenshots/pdf-receipt.png) |
+
+---
+
+### Calendário Operacional
+
+![Calendário — Visão Mês](docs/screenshots/calendar-month.png)
+*Visão mensal com eventos coloridos por urgência de devolução*
+
+![Calendário — Visão Lista](docs/screenshots/calendar-list.png)
+*Visão de agenda com todos os contratos e datas de devolução*
 
 ---
 
