@@ -5,10 +5,10 @@ import { CalendarPage } from '@/features/calendar/pages/CalendarPage'
 import { useCalendarRentals } from '@/features/calendar/hooks/useCalendarRentals'
 import { useAuthStore } from '@/stores/auth.store'
 
-// Mock FullCalendar — renderiza eventos como botões clicáveis para testes
+// Mock FullCalendar — expõe initialView e eventos como botões clicáveis
 vi.mock('@fullcalendar/react', () => ({
-  default: ({ events, eventClick }: any) => (
-    <div data-testid="fullcalendar">
+  default: ({ events, eventClick, initialView }: any) => (
+    <div data-testid="fullcalendar" data-initial-view={initialView}>
       {(events ?? []).map((event: any) => (
         <button
           key={event.id}
@@ -75,10 +75,18 @@ function renderPage() {
   return render(<MemoryRouter><CalendarPage /></MemoryRouter>)
 }
 
+// Helpers para simular viewport
+function setViewport(width: number) {
+  Object.defineProperty(window, 'innerWidth', { value: width, writable: true, configurable: true })
+}
+
 describe('CalendarPage', () => {
   beforeEach(() => {
     mockNavigate.mockReset()
+    setViewport(1024) // default desktop
   })
+
+  // --- Estados de carregamento ---
 
   it('renderiza loading state', async () => {
     mockUseAuthStore.mockReturnValue({ user: { role: 'admin' } })
@@ -106,13 +114,80 @@ describe('CalendarPage', () => {
     await waitFor(() => expect(screen.getByText(/nenhuma locação/i)).toBeInTheDocument())
   })
 
-  it('renderiza título do evento com contractNumber e customer.name', async () => {
+  // --- Desktop (window.innerWidth = 1024) ---
+
+  it('desktop: initialView é dayGridMonth', async () => {
+    setupMocks()
+    renderPage()
+    await waitFor(() =>
+      expect(screen.getByTestId('fullcalendar')).toHaveAttribute('data-initial-view', 'dayGridMonth')
+    )
+  })
+
+  it('desktop: título do evento usa formato longo "Contrato X · Nome"', async () => {
+    setupMocks()
+    renderPage()
+    await waitFor(() =>
+      expect(screen.getByText('Contrato 2026-0001 · João Silva')).toBeInTheDocument()
+    )
+  })
+
+  it('desktop: toolbar nativa do FullCalendar é usada (sem mobile-toolbar)', async () => {
+    setupMocks()
+    renderPage()
+    await waitFor(() => expect(screen.queryByTestId('mobile-toolbar')).not.toBeInTheDocument())
+  })
+
+  // --- Mobile (window.innerWidth = 375) ---
+
+  it('mobile: initialView é listMonth', async () => {
+    setViewport(375)
+    setupMocks()
+    renderPage()
+    await waitFor(() =>
+      expect(screen.getByTestId('fullcalendar')).toHaveAttribute('data-initial-view', 'listMonth')
+    )
+  })
+
+  it('mobile: título do evento usa formato curto "#número · nome"', async () => {
+    setViewport(375)
+    setupMocks()
+    renderPage()
+    await waitFor(() =>
+      expect(screen.getByText('#2026-0001 · João Silva')).toBeInTheDocument()
+    )
+  })
+
+  it('mobile: toolbar customizada de dois níveis é exibida', async () => {
+    setViewport(375)
+    setupMocks()
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('mobile-toolbar')).toBeInTheDocument())
+  })
+
+  it('mobile: legenda exibe os 4 status (compacta)', async () => {
+    setViewport(375)
     setupMocks()
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('Contrato 2026-0001 · João Silva')).toBeInTheDocument()
+      expect(screen.getByText('Atrasado')).toBeInTheDocument()
+      expect(screen.getByText('Vence hoje')).toBeInTheDocument()
+      expect(screen.getByText('Próximos 1–3 dias')).toBeInTheDocument()
+      expect(screen.getByText('Futuro')).toBeInTheDocument()
     })
   })
+
+  it('mobile: clicar em evento navega para /rentals/:id', async () => {
+    const user = userEvent.setup()
+    setViewport(375)
+    setupMocks()
+    renderPage()
+    await waitFor(() => screen.getByText('#2026-0001 · João Silva'))
+    await user.click(screen.getByText('#2026-0001 · João Silva'))
+    expect(mockNavigate).toHaveBeenCalledWith('/rentals/rental-1')
+  })
+
+  // --- Legenda (desktop) ---
 
   it('legenda visível com os 4 status', async () => {
     setupMocks()
@@ -124,6 +199,8 @@ describe('CalendarPage', () => {
       expect(screen.getByText('Futuro')).toBeInTheDocument()
     })
   })
+
+  // --- Cores de urgência ---
 
   it('ao clicar em evento, navega para /rentals/:rentalId', async () => {
     const user = userEvent.setup()
@@ -138,8 +215,7 @@ describe('CalendarPage', () => {
     setupMocks()
     renderPage()
     await waitFor(() => screen.getByText('Contrato 2026-0001 · João Silva'))
-    const eventEl = screen.getByText('Contrato 2026-0001 · João Silva')
-    expect(eventEl).toHaveAttribute('data-color', '#22c55e')
+    expect(screen.getByText('Contrato 2026-0001 · João Silva')).toHaveAttribute('data-color', '#22c55e')
   })
 
   it('evento atrasado recebe cor vermelha', async () => {
@@ -152,9 +228,10 @@ describe('CalendarPage', () => {
     })
     renderPage()
     await waitFor(() => screen.getByText('Contrato 2026-0002 · João Silva'))
-    const eventEl = screen.getByText('Contrato 2026-0002 · João Silva')
-    expect(eventEl).toHaveAttribute('data-color', '#ef4444')
+    expect(screen.getByText('Contrato 2026-0002 · João Silva')).toHaveAttribute('data-color', '#ef4444')
   })
+
+  // --- RBAC ---
 
   it('admin acessa sem redirect', async () => {
     setupMocks('admin')
