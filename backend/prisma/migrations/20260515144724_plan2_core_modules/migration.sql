@@ -9,7 +9,10 @@ DROP TYPE "InventoryMovementType_old";
 -- RentalStatus: remove overdue and cancelled, add canceled
 ALTER TYPE "RentalStatus" RENAME TO "RentalStatus_old";
 CREATE TYPE "RentalStatus" AS ENUM ('active', 'returned', 'canceled');
+-- Drop default before altering type (PostgreSQL cannot cast the old typed default automatically)
+ALTER TABLE "rentals" ALTER COLUMN "status" DROP DEFAULT;
 ALTER TABLE "rentals" ALTER COLUMN "status" TYPE "RentalStatus" USING "status"::text::"RentalStatus";
+ALTER TABLE "rentals" ALTER COLUMN "status" SET DEFAULT 'active'::"RentalStatus";
 DROP TYPE "RentalStatus_old";
 
 -- New enums
