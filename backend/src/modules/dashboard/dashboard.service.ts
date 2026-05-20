@@ -147,14 +147,14 @@ export class DashboardService {
   }
 
   async getInventoryData() {
-    const items = await this.prisma.item.findMany({
+    const agg = await this.prisma.item.aggregate({
       where: { isActive: true },
-      select: { totalQty: true, availableQty: true, rentedQty: true, maintenanceQty: true },
+      _sum: { totalQty: true, availableQty: true, rentedQty: true, maintenanceQty: true },
     });
-    const totalItems = items.reduce((s, i) => s + i.totalQty, 0);
-    const availableItems = items.reduce((s, i) => s + i.availableQty, 0);
-    const rentedItems = items.reduce((s, i) => s + i.rentedQty, 0);
-    const maintenanceItems = items.reduce((s, i) => s + i.maintenanceQty, 0);
+    const totalItems = agg._sum.totalQty ?? 0;
+    const availableItems = agg._sum.availableQty ?? 0;
+    const rentedItems = agg._sum.rentedQty ?? 0;
+    const maintenanceItems = agg._sum.maintenanceQty ?? 0;
     return {
       totalItems,
       availableItems,

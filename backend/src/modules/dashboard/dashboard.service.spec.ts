@@ -6,7 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 const mockPrisma = {
   financialTransaction: { findMany: jest.fn() },
   rental: { count: jest.fn(), findMany: jest.fn() },
-  item: { findMany: jest.fn() },
+  item: { findMany: jest.fn(), aggregate: jest.fn() },
   payment: { findMany: jest.fn() },
 };
 
@@ -14,7 +14,7 @@ function setupDefaultMocks() {
   mockPrisma.financialTransaction.findMany.mockResolvedValue([]);
   mockPrisma.rental.count.mockResolvedValue(0);
   mockPrisma.rental.findMany.mockResolvedValue([]);
-  mockPrisma.item.findMany.mockResolvedValue([]);
+  mockPrisma.item.aggregate.mockResolvedValue({ _sum: { totalQty: null, availableQty: null, rentedQty: null, maintenanceQty: null } });
   mockPrisma.payment.findMany.mockResolvedValue([]);
 }
 
@@ -71,7 +71,7 @@ describe('DashboardService', () => {
     mockPrisma.payment.findMany.mockResolvedValue([]);
     mockPrisma.rental.count.mockResolvedValue(0);
     mockPrisma.rental.findMany.mockResolvedValue([]);
-    mockPrisma.item.findMany.mockResolvedValue([]);
+    mockPrisma.item.aggregate.mockResolvedValue({ _sum: { totalQty: null, availableQty: null, rentedQty: null, maintenanceQty: null } });
 
     const result = await service.getSummary(UserRole.admin);
     expect(result.financial?.totalIncome).toBe(8400);
@@ -86,7 +86,7 @@ describe('DashboardService', () => {
     mockPrisma.payment.findMany.mockResolvedValue([]);
     mockPrisma.rental.count.mockResolvedValue(0);
     mockPrisma.rental.findMany.mockResolvedValue([]);
-    mockPrisma.item.findMany.mockResolvedValue([]);
+    mockPrisma.item.aggregate.mockResolvedValue({ _sum: { totalQty: null, availableQty: null, rentedQty: null, maintenanceQty: null } });
 
     const result = await service.getSummary(UserRole.financial);
     expect(result.financial?.totalIncome).toBe(5000);
@@ -107,7 +107,7 @@ describe('DashboardService', () => {
     mockPrisma.payment.findMany.mockResolvedValue([]);
     mockPrisma.rental.count.mockResolvedValue(0);
     mockPrisma.rental.findMany.mockResolvedValue([]);
-    mockPrisma.item.findMany.mockResolvedValue([]);
+    mockPrisma.item.aggregate.mockResolvedValue({ _sum: { totalQty: null, availableQty: null, rentedQty: null, maintenanceQty: null } });
 
     await service.getSummary(UserRole.admin);
     const [whereArg] = mockPrisma.financialTransaction.findMany.mock.calls[0];
@@ -122,7 +122,7 @@ describe('DashboardService', () => {
     mockPrisma.payment.findMany.mockResolvedValue([]);
     mockPrisma.rental.count.mockResolvedValue(0);
     mockPrisma.rental.findMany.mockResolvedValue([]);
-    mockPrisma.item.findMany.mockResolvedValue([]);
+    mockPrisma.item.aggregate.mockResolvedValue({ _sum: { totalQty: null, availableQty: null, rentedQty: null, maintenanceQty: null } });
 
     const result = await service.getSummary(UserRole.admin);
     expect(result.financial?.balance).toBe(2000);
@@ -216,9 +216,7 @@ describe('DashboardService', () => {
 
   it('calcula inventory.occupancyRate', async () => {
     setupDefaultMocks();
-    mockPrisma.item.findMany.mockResolvedValue([
-      { totalQty: 100, availableQty: 60, rentedQty: 40, maintenanceQty: 0 },
-    ]);
+    mockPrisma.item.aggregate.mockResolvedValue({ _sum: { totalQty: 100, availableQty: 60, rentedQty: 40, maintenanceQty: 0 } });
 
     const result = await service.getSummary(UserRole.attendant);
     expect(result.inventory.occupancyRate).toBe(40);
@@ -229,7 +227,7 @@ describe('DashboardService', () => {
 
   it('retorna occupancyRate = 0 quando totalItems = 0', async () => {
     setupDefaultMocks();
-    mockPrisma.item.findMany.mockResolvedValue([]);
+    mockPrisma.item.aggregate.mockResolvedValue({ _sum: { totalQty: null, availableQty: null, rentedQty: null, maintenanceQty: null } });
 
     const result = await service.getSummary(UserRole.attendant);
     expect(result.inventory.occupancyRate).toBe(0);
@@ -287,7 +285,7 @@ describe('DashboardService', () => {
     );
     mockPrisma.rental.count.mockResolvedValue(0);
     mockPrisma.rental.findMany.mockResolvedValue([]);
-    mockPrisma.item.findMany.mockResolvedValue([]);
+    mockPrisma.item.aggregate.mockResolvedValue({ _sum: { totalQty: null, availableQty: null, rentedQty: null, maintenanceQty: null } });
 
     const result = await service.getSummary(UserRole.admin);
     expect(result.financial?.recentPayments).toHaveLength(5);

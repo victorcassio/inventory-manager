@@ -188,6 +188,8 @@ model Item {
   rentalItems        RentalItem[]
   inventoryMovements InventoryMovement[]
 
+  @@index([categoryId])
+  @@index([isActive])
   @@map("items")
 }
 
@@ -240,6 +242,8 @@ model Rental {
   documents             Document[]
   financialTransactions FinancialTransaction[]
 
+  @@index([status, expectedReturn])
+  @@index([customerId])
   @@map("rentals")
 }
 
@@ -255,6 +259,8 @@ model RentalItem {
   item        Item         @relation(fields: [itemId], references: [id])
   returnItems ReturnItem[]
 
+  @@index([rentalId])
+  @@index([itemId])
   @@map("rental_items")
 }
 
@@ -312,6 +318,8 @@ model Payment {
   documents             Document[]
   financialTransactions FinancialTransaction[]
 
+  @@index([rentalId])
+  @@index([paidAt])
   @@map("payments")
 }
 
@@ -337,6 +345,8 @@ model FinancialTransaction {
   rental  Rental?  @relation(fields: [rentalId], references: [id])
   payment Payment? @relation(fields: [paymentId], references: [id])
 
+  @@index([isVoided, date])
+  @@index([userId, date])
   @@map("financial_transactions")
 }
 

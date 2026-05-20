@@ -95,10 +95,17 @@ export class RentalsService {
       });
       const contractNumber = `${year}-${String(counter.lastSeq).padStart(4, '0')}`;
 
-      // Fetch items, validate, collect unitPrice
+      // Fetch all items in one query, validate, collect unitPrice
+      const itemIds = dto.items.map(ri => ri.itemId);
+      const fetchedItems = await tx.item.findMany({
+        where: { id: { in: itemIds } },
+        select: { id: true, code: true, isActive: true, availableQty: true, dailyRate: true },
+      });
+      const itemMap = new Map(fetchedItems.map(i => [i.id, i]));
+
       const itemsData: Array<{ itemId: string; quantity: number; unitPrice: number }> = [];
       for (const ri of dto.items) {
-        const item = await tx.item.findUnique({ where: { id: ri.itemId } });
+        const item = itemMap.get(ri.itemId);
         if (!item || !item.isActive) {
           throw new NotFoundException(`Item ${ri.itemId} not found or inactive`);
         }

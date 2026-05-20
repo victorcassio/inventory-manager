@@ -71,7 +71,7 @@ const baseRentalItem = {
 const mockPrisma = {
   customer: { findUnique: jest.fn() },
   contractCounter: { upsert: jest.fn(), update: jest.fn() },
-  item: { findUnique: jest.fn() },
+  item: { findUnique: jest.fn(), findMany: jest.fn() },
   rental: {
     create: jest.fn(),
     update: jest.fn(),
@@ -97,7 +97,7 @@ function setupHappyPathCreate() {
   mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
   mockPrisma.contractCounter.upsert.mockResolvedValue({});
   mockPrisma.contractCounter.update.mockResolvedValue({ year: 2026, lastSeq: 1 });
-  mockPrisma.item.findUnique.mockResolvedValue(baseItem);
+  mockPrisma.item.findMany.mockResolvedValue([baseItem]);
   mockPrisma.rental.create.mockResolvedValue(baseRental);
   mockPrisma.rentalItem.createMany.mockResolvedValue({ count: 1 });
   mockPrisma.rental.update.mockResolvedValue(baseRental);
@@ -217,7 +217,7 @@ describe('RentalsService', () => {
       mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
       mockPrisma.contractCounter.upsert.mockResolvedValue({});
       mockPrisma.contractCounter.update.mockResolvedValue({ year: 2026, lastSeq: 1 });
-      mockPrisma.item.findUnique.mockResolvedValue(null);
+      mockPrisma.item.findMany.mockResolvedValue([]);
 
       await expect(service.createRental(validCreateDto, 'user-1')).rejects.toThrow(
         NotFoundException,
