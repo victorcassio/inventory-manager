@@ -1,29 +1,31 @@
 # Inventory Manager
 
-Sistema web completo de gestão de locação de equipamentos e materiais. Cobre o ciclo de vida de ponta a ponta: controle de estoque, criação e acompanhamento de locações, devoluções parciais ou totais, pagamentos, lançamentos financeiros, geração de documentos PDF e calendário operacional de devoluções.
+> 🌐 **English** | [Versão em Português](README.pt-BR.md)
 
-Projetado para empresas que trabalham com aluguel de andaimes, ferramentas, geradores, equipamentos de construção e similares.
+A full-featured web application for managing equipment and material rentals. Covers the entire lifecycle end-to-end: inventory control, rental contract creation and tracking, partial or full returns, payments, financial entries, PDF document generation, and an operational returns calendar.
+
+Designed for companies that rent scaffolding, tools, generators, construction equipment, and similar items.
 
 ---
 
-## Sumário
+## Table of Contents
 
 - [Stack](#stack)
-- [Funcionalidades](#funcionalidades)
+- [Features](#features)
 - [Screenshots](#screenshots)
-- [Estrutura do projeto](#estrutura-do-projeto)
-- [Como rodar](#como-rodar)
-- [Variáveis de ambiente](#variáveis-de-ambiente)
-- [Banco de dados e Prisma](#banco-de-dados-e-prisma)
-- [Scripts disponíveis](#scripts-disponíveis)
-- [Testes](#testes)
-- [Autenticação e RBAC](#autenticação-e-rbac)
-- [Responsividade mobile](#responsividade-mobile)
-- [Otimizações de performance](#otimizações-de-performance)
-- [Segurança](#segurança)
-- [Decisões técnicas](#decisões-técnicas)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Database and Prisma](#database-and-prisma)
+- [Available Scripts](#available-scripts)
+- [Testing](#testing)
+- [Authentication and RBAC](#authentication-and-rbac)
+- [Mobile Responsiveness](#mobile-responsiveness)
+- [Performance Optimizations](#performance-optimizations)
+- [Security](#security)
+- [Technical Decisions](#technical-decisions)
 - [Roadmap](#roadmap)
-- [Autor](#autor)
+- [Author](#author)
 
 ---
 
@@ -31,143 +33,143 @@ Projetado para empresas que trabalham com aluguel de andaimes, ferramentas, gera
 
 ### Frontend
 
-| Tecnologia | Versão | Função |
+| Technology | Version | Purpose |
 |---|---|---|
-| React | 18.3 | UI |
-| TypeScript | 5.7 | Tipagem |
-| Vite | 6.0 | Build e dev server |
-| React Router | 6.28 | Roteamento SPA |
-| TanStack Query | 5.62 | Server state e cache |
-| Zustand | 5.0 | Auth state global |
-| React Hook Form | 7.54 | Formulários |
-| Zod | 3.24 | Validação de schema |
-| Tailwind CSS | 3.4 | Estilização |
-| shadcn/ui + Radix | — | Componentes acessíveis |
-| Recharts | 3.8 | Gráficos do dashboard |
-| FullCalendar | 6.1 | Calendário operacional |
+| React | 18.3 | UI library |
+| TypeScript | 5.7 | Static typing |
+| Vite | 6.0 | Build tool and dev server |
+| React Router | 6.28 | SPA routing |
+| TanStack Query | 5.62 | Server state and caching |
+| Zustand | 5.0 | Global auth state |
+| React Hook Form | 7.54 | Form handling |
+| Zod | 3.24 | Schema validation |
+| Tailwind CSS | 3.4 | Styling |
+| shadcn/ui + Radix | — | Accessible component primitives |
+| Recharts | 3.8 | Dashboard charts |
+| FullCalendar | 6.1 | Operational calendar |
 | Axios | 1.7 | HTTP client |
-| date-fns | 4.1 | Manipulação de datas |
-| Lucide React | 0.468 | Ícones |
-| Sonner | 1.7 | Notificações toast |
+| date-fns | 4.1 | Date manipulation |
+| Lucide React | 0.468 | Icon library |
+| Sonner | 1.7 | Toast notifications |
 
 ### Backend
 
-| Tecnologia | Versão | Função |
+| Technology | Version | Purpose |
 |---|---|---|
 | Node.js | 20.x | Runtime |
-| NestJS | 10.4 | Framework HTTP |
+| NestJS | 10.4 | HTTP framework |
 | Prisma | 7.8 | ORM |
-| PostgreSQL | 16 | Banco de dados |
-| JWT + Passport | — | Autenticação |
-| PDFKit | — | Geração de PDFs |
-| Helmet | — | Headers de segurança |
-| class-validator | — | Validação de DTOs |
+| PostgreSQL | 16 | Database |
+| JWT + Passport | — | Authentication |
+| PDFKit | — | Server-side PDF generation |
+| Helmet | — | HTTP security headers |
+| class-validator | — | DTO validation |
 
-### Infra e tooling
+### Infrastructure and Tooling
 
-| Tecnologia | Função |
+| Technology | Purpose |
 |---|---|
-| Docker Compose | PostgreSQL local |
-| Vitest | Testes frontend |
-| Jest | Testes backend |
+| Docker Compose | Local PostgreSQL |
+| Vitest | Frontend testing |
+| Jest | Backend testing |
 | React.lazy + Suspense | Code splitting |
 
 ---
 
-## Funcionalidades
+## Features
 
-### Auth e RBAC
+### Auth and RBAC
 
-- Login com e-mail e senha, JWT com refresh token rotativo
-- 3 perfis de acesso com permissões granulares:
-  - **Admin** — acesso total
-  - **Atendente** — operações de locação, devolução, estoque e documentos
-  - **Financeiro** — dashboard, pagamentos, lançamentos financeiros e documentos
-- Guards em todos os endpoints sensíveis do backend
-- Proteção de rotas no frontend com redirect automático
+- Email and password login with rotating JWT refresh tokens
+- 3 access roles with granular permissions:
+  - **Admin** — full access
+  - **Attendant** — rental operations, returns, inventory, and documents
+  - **Financial** — dashboard, payments, financial entries, and documents
+- Guards on all sensitive backend endpoints
+- Frontend route protection with automatic redirects
 
 ### Dashboard
 
-- KPIs em tempo real: receita do mês, locações ativas, vencidas, inadimplência
-- Gráfico de barras com receita e despesas dos últimos 6 meses
-- Gráfico de pizza com distribuição de status das locações
-- Barra de ocupação do estoque (disponível, alugado, em manutenção)
-- Lista de devoluções próximas e locações com atraso
-- Permissões por role: financeiro não vê dados operacionais de clientes
+- Real-time KPIs: monthly revenue, active rentals, overdue, delinquency
+- Bar chart: revenue vs. expenses for the last 6 months
+- Pie chart: rental status distribution
+- Inventory occupancy bar (available, rented, under maintenance)
+- Upcoming returns list and overdue rentals list
+- Role-based visibility: financial role does not see operational customer data
 
-### Clientes
+### Customers
 
-- Cadastro de PF (CPF) e PJ (CNPJ) com validação de documento
-- Busca por nome com debounce
-- Listagem paginada, detalhe e edição
-- Histórico de locações por cliente
+- Individual (CPF) and company (CNPJ) registration with document validation
+- Name search with debounce
+- Paginated listing, detail view, and editing
+- Rental history per customer
 
-### Estoque
+### Inventory
 
-- Itens com código único, categoria, valor diário, quantidade total/disponível/alugada/manutenção
-- Categorias de equipamentos
-- Controle automático de disponibilidade a cada locação e devolução
-- Movimentações de inventário auditadas
+- Items with unique code, category, daily rate, and quantity tracking (total/available/rented/maintenance)
+- Equipment categories
+- Automatic availability control on every rental and return
+- Audited inventory movements
 
-### Locações
+### Rentals
 
-- Criação de contrato com múltiplos itens e quantidades
-- Numeração sequencial automática por ano (ex: `2026-0042`)
-- Cálculo de total: `(valor_diário × dias × quantidade) − desconto + extras`
-- Status computado: **Ativo**, **Vencido** (automático, sem campo DB), **Devolvido**, **Cancelado**
-- Filtro por status, cliente, datas
-- Cancelamento com reversão automática do estoque
+- Contract creation with multiple items and quantities
+- Automatic sequential numbering per year (e.g., `2026-0042`)
+- Total calculation: `(daily_rate × days × quantity) − discount + extras`
+- Computed status: **Active**, **Overdue** (automatic, no DB field), **Returned**, **Cancelled**
+- Filtering by status, customer, and dates
+- Cancellation with automatic stock reversal
 
-### Devoluções
+### Returns
 
-- Devolução parcial ou total por item
-- Registro de condição (bom estado, danificado, extraviado)
-- Taxa de dano automática por item
-- Cálculo de dias de atraso e multa
+- Partial or full return per item
+- Condition tracking (good, damaged, lost)
+- Automatic damage fee per item
+- Late days and late fee calculation
 
-### Pagamentos
+### Payments
 
-- Registro de pagamentos por locação (dinheiro, PIX, cartão, transferência)
-- Histórico global de pagamentos com filtros de período e método
-- Saldo em aberto calculado em tempo real
-- Geração automática de lançamento financeiro ao pagar
+- Payment registration per rental (cash, PIX, card, bank transfer)
+- Global payment history with period and method filters
+- Outstanding balance calculated in real time
+- Automatic financial entry creation on payment
 
-### Financeiro
+### Financial
 
-- Lançamentos manuais de entrada e saída (aluguel, estoque, manutenção, transporte, etc.)
-- Lançamentos automáticos gerados pelos pagamentos de locação
-- Filtros por tipo, categoria, origem e período (hoje, semana, mês, mês passado, ano, custom)
-- Sumário de entradas, saídas, saldo e lançamentos anulados
-- Anulação de lançamentos com registro de motivo
+- Manual income and expense entries (rental, inventory, maintenance, transport, etc.)
+- Automatic entries generated from rental payments
+- Filters by type, category, origin, and period (today, week, month, last month, year, custom)
+- Summary of income, expenses, balance, and voided entries
+- Entry voiding with reason tracking
 
-### Documentos
+### Documents
 
-- Geração de PDF server-side via PDFKit:
-  - **Contrato de locação** — dados do cliente, itens, período, valor
-  - **Recibo de pagamento** — comprovante com método e referência
-  - **Comprovante de devolução** — itens devolvidos, condições, taxas
-- Listagem global com filtros por tipo, status, contrato e período
-- Download direto do PDF
+- Server-side PDF generation via PDFKit:
+  - **Rental contract** — customer data, items, period, and total
+  - **Payment receipt** — proof with method and reference code
+  - **Return proof** — returned items, conditions, and fees
+- Global listing with filters by type, status, contract, and period
+- Direct PDF download
 
-### Calendário
+### Calendar
 
-- Visão mensal e lista das devoluções previstas de locações ativas
-- Código de cores por urgência:
-  - 🔴 Atrasado
-  - 🟠 Vence hoje
-  - 🟡 Próximos 1–3 dias
-  - 🟢 Futuro
-- Clique no evento navega para o contrato
-- Toolbar customizada no mobile (dois níveis)
-- ResizeObserver para recalcular layout ao abrir/fechar sidebar
+- Monthly and list views of expected returns for active rentals
+- Color-coded urgency:
+  - 🔴 Overdue
+  - 🟠 Due today
+  - 🟡 Next 1–3 days
+  - 🟢 Future
+- Click on event navigates to the contract
+- Custom two-level toolbar on mobile
+- ResizeObserver recalculates layout on sidebar open/close
 
 ### Mobile
 
-- Todas as tabelas convertidas em listas compactas no mobile (`< 768px`)
-- `FilterPanel` colapsável com chips de filtros ativos
-- Sidebar com overlay e scroll lock no mobile
-- Paginação responsiva (`Mostrando X–Y de Z`)
-- Desktop sem regressão
+- All tables converted to compact lists on mobile (`< 768px`)
+- Collapsible `FilterPanel` with active filter chips
+- Sidebar with overlay and body scroll lock on mobile
+- Responsive pagination (`Showing X–Y of Z`)
+- Desktop layout unchanged
 
 ---
 
@@ -176,104 +178,104 @@ Projetado para empresas que trabalham com aluguel de andaimes, ferramentas, gera
 ### Dashboard
 
 ![Dashboard — KPIs](docs/screenshots/dashboard-kpis.png)
-*KPIs financeiros, locações por status e estoque em tempo real*
+*Financial KPIs, rental status, and real-time inventory overview*
 
-![Dashboard — Gráficos](docs/screenshots/dashboard-charts.png)
-*Receita × Despesas (6 meses), receita acumulada, locações por status e ocupação do estoque*
+![Dashboard — Charts](docs/screenshots/dashboard-charts.png)
+*Revenue vs. Expenses (6 months), cumulative revenue, rental status pie, and inventory occupancy*
 
-![Dashboard — Listas operacionais](docs/screenshots/dashboard-lists.png)
-*Pagamentos recentes, próximas devoluções e devoluções atrasadas*
+![Dashboard — Operational Lists](docs/screenshots/dashboard-lists.png)
+*Recent payments, upcoming returns, and overdue returns*
 
 ---
 
-### Clientes e Estoque
+### Customers and Inventory
 
-| Clientes | Novo Cliente |
+| Customers | New Customer |
 |---|---|
-| ![Clientes](docs/screenshots/customers.png) | ![Novo Cliente](docs/screenshots/customer-form.png) |
+| ![Customers](docs/screenshots/customers.png) | ![New Customer](docs/screenshots/customer-form.png) |
 
-| Estoque | Novo Item |
+| Inventory | New Item |
 |---|---|
-| ![Estoque](docs/screenshots/inventory.png) | ![Novo Item](docs/screenshots/inventory-form.png) |
+| ![Inventory](docs/screenshots/inventory.png) | ![New Item](docs/screenshots/inventory-form.png) |
 
 ---
 
-### Locações e Pagamentos
+### Rentals and Payments
 
-![Locações](docs/screenshots/rentals.png)
-*Listagem com status computado: Ativo, Vencido, Devolvido, Cancelado*
+![Rentals](docs/screenshots/rentals.png)
+*Listing with computed status: Active, Overdue, Returned, Cancelled*
 
-| Nova Locação | Pagamentos |
+| New Rental | Payments |
 |---|---|
-| ![Nova Locação](docs/screenshots/rental-form.png) | ![Pagamentos](docs/screenshots/payments.png) |
+| ![New Rental](docs/screenshots/rental-form.png) | ![Payments](docs/screenshots/payments.png) |
 
 ---
 
-### Financeiro
+### Financial
 
-![Financeiro](docs/screenshots/financial.png)
-*Lançamentos com KPIs de entradas, saídas, saldo e filtros por período*
+![Financial](docs/screenshots/financial.png)
+*Entries with income/expense KPIs, balance, and period filters*
 
-![Novo Lançamento](docs/screenshots/financial-form.png)
-*Formulário de lançamento manual com seletor visual de tipo (entrada/saída)*
+![New Entry](docs/screenshots/financial-form.png)
+*Manual entry form with visual type selector (income/expense)*
 
 ---
 
-### Documentos e PDFs
+### Documents and PDFs
 
-![Documentos](docs/screenshots/documents.png)
-*Listagem global de contratos, recibos e comprovantes com download direto*
+![Documents](docs/screenshots/documents.png)
+*Global listing of contracts, receipts, and return proofs with direct download*
 
-| Contrato de Locação (PDF) | Recibo de Pagamento (PDF) |
+| Rental Contract (PDF) | Payment Receipt (PDF) |
 |---|---|
-| ![PDF Contrato](docs/screenshots/pdf-contract.png) | ![PDF Recibo](docs/screenshots/pdf-receipt.png) |
+| ![PDF Contract](docs/screenshots/pdf-contract.png) | ![PDF Receipt](docs/screenshots/pdf-receipt.png) |
 
 ---
 
-### Calendário Operacional
+### Operational Calendar
 
-![Calendário — Visão Mês](docs/screenshots/calendar-month.png)
-*Visão mensal com eventos coloridos por urgência de devolução*
+![Calendar — Month View](docs/screenshots/calendar-month.png)
+*Monthly view with color-coded return urgency events*
 
-![Calendário — Visão Lista](docs/screenshots/calendar-list.png)
-*Visão de agenda com todos os contratos e datas de devolução*
+![Calendar — List View](docs/screenshots/calendar-list.png)
+*Agenda view with all contracts and return dates*
 
 ---
 
-## Estrutura do projeto
+## Project Structure
 
 ```
 inventory-manager/
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma          # Modelos e índices
-│   │   ├── migrations/            # Histórico de migrations
-│   │   ├── seed.ts                # Seed de produção (usuários admin)
-│   │   └── seed-demo.ts           # Seed de desenvolvimento com dados completos
+│   │   ├── schema.prisma          # Models and indexes
+│   │   ├── migrations/            # Migration history
+│   │   ├── seed.ts                # Production seed (admin users)
+│   │   └── seed-demo.ts           # Development seed with full demo data
 │   └── src/
-│       ├── common/                # Pipes, filtros, tipos compartilhados
+│       ├── common/                # Shared pipes, filters, and types
 │       ├── prisma/                # PrismaService
 │       └── modules/
 │           ├── auth/              # JWT, login, refresh token
-│           ├── users/             # Gestão de usuários
-│           ├── audit/             # Audit log de mutações
-│           ├── customers/         # Clientes PF/PJ
-│           ├── inventory/         # Itens, categorias, movimentações
-│           ├── rentals/           # Contratos de locação
-│           ├── returns/           # Devoluções parciais/totais
-│           ├── payments/          # Pagamentos por locação
-│           ├── financial/         # Lançamentos financeiros
-│           ├── documents/         # Geração e listagem de PDFs
-│           └── dashboard/         # KPIs e gráficos
+│           ├── users/             # User management
+│           ├── audit/             # Mutation audit log
+│           ├── customers/         # Individual and company customers
+│           ├── inventory/         # Items, categories, movements
+│           ├── rentals/           # Rental contracts
+│           ├── returns/           # Partial and full returns
+│           ├── payments/          # Payments per rental
+│           ├── financial/         # Financial entries
+│           ├── documents/         # PDF generation and listing
+│           └── dashboard/         # KPIs and charts
 ├── frontend/
 │   └── src/
-│       ├── app/                   # Providers, router, layout raiz
+│       ├── app/                   # Providers, router, root layout
 │       ├── components/
 │       │   ├── ui/                # shadcn/ui components
 │       │   ├── layout/            # AppLayout, Sidebar, Header
 │       │   ├── feedback/          # EmptyState, ErrorState, StatusBadge
-│       │   └── filters/           # FilterPanel (colapsável mobile)
-│       ├── features/              # Uma pasta por domínio
+│       │   └── filters/           # FilterPanel (collapsible mobile)
+│       ├── features/              # One folder per domain
 │       │   ├── auth/
 │       │   ├── dashboard/
 │       │   ├── customers/
@@ -287,30 +289,30 @@ inventory-manager/
 │       ├── hooks/                 # usePagination, etc.
 │       ├── lib/                   # API client, formatters, permissions, utils
 │       ├── stores/                # Auth store (Zustand)
-│       └── types/                 # Tipos globais TypeScript
-└── docker-compose.dev.yml         # PostgreSQL local
+│       └── types/                 # Global TypeScript types
+└── docker-compose.dev.yml         # Local PostgreSQL
 ```
 
 ---
 
-## Como rodar
+## Getting Started
 
-### Pré-requisitos
+### Prerequisites
 
 - Node.js 20.x
-- Docker e Docker Compose
-- `nvm` (recomendado)
+- Docker and Docker Compose
+- `nvm` (recommended)
 
 ```bash
-# Clonar o repositório
+# Clone the repository
 git clone https://github.com/victorcassio/inventory-manager.git
 cd inventory-manager
 ```
 
-### 1. Banco de dados
+### 1. Database
 
 ```bash
-# Subir PostgreSQL via Docker
+# Start PostgreSQL via Docker
 docker compose -f docker-compose.dev.yml up -d postgres
 ```
 
@@ -319,23 +321,23 @@ docker compose -f docker-compose.dev.yml up -d postgres
 ```bash
 cd backend
 
-# Usar a versão correta do Node
+# Use the correct Node version
 nvm use 20
 
-# Instalar dependências
+# Install dependencies
 npm install
 
-# Copiar e configurar variáveis de ambiente
+# Copy and configure environment variables
 cp .env.example .env
-# editar DATABASE_URL, JWT_SECRET, etc.
+# edit DATABASE_URL, JWT_SECRET, etc.
 
-# Aplicar migrations
+# Apply migrations
 npx prisma migrate dev
 
-# Popular banco com dados de demonstração
+# Seed the database with demo data
 npx ts-node prisma/seed-demo.ts
 
-# Iniciar servidor de desenvolvimento (porta 3003)
+# Start the development server (port 3003)
 npm run start:dev
 ```
 
@@ -344,39 +346,39 @@ npm run start:dev
 ```bash
 cd frontend
 
-# Instalar dependências
+# Install dependencies
 npm install
 
-# Copiar e configurar variáveis de ambiente
+# Copy and configure environment variables
 cp .env.example .env
-# editar VITE_API_URL=http://localhost:3003/api/v1
+# edit VITE_API_URL=http://localhost:3003/api/v1
 
-# Iniciar dev server (porta 5173)
+# Start the dev server (port 5173)
 npm run dev
 ```
 
-### Credenciais de desenvolvimento
+### Development Credentials
 
-| Usuário | E-mail | Senha | Role |
+| User | Email | Password | Role |
 |---|---|---|---|
-| Administrador | `admin@inventory.local` | `Admin@123456` | admin |
-| Atendente | `atendente@inventory.local` | `Admin@123456` | attendant |
-| Financeiro | `financeiro@inventory.local` | `Admin@123456` | financial |
+| Administrator | `admin@inventory.local` | `Admin@123456` | admin |
+| Attendant | `atendente@inventory.local` | `Admin@123456` | attendant |
+| Financial | `financeiro@inventory.local` | `Admin@123456` | financial |
 
 ---
 
-## Variáveis de ambiente
+## Environment Variables
 
 ### Backend (`backend/.env`)
 
 ```env
-# Banco de dados
+# Database
 DATABASE_URL="postgresql://inventory_user:inventory_pass_dev@localhost:5440/inventory_db"
 
 # JWT
-JWT_SECRET="sua-chave-secreta-aqui"
+JWT_SECRET="your-secret-key-here"
 JWT_EXPIRES_IN="15m"
-JWT_REFRESH_SECRET="sua-chave-refresh-aqui"
+JWT_REFRESH_SECRET="your-refresh-secret-here"
 JWT_REFRESH_EXPIRES_IN="7d"
 
 # App
@@ -392,9 +394,9 @@ VITE_API_URL=http://localhost:3003/api/v1
 
 ---
 
-## Banco de dados e Prisma
+## Database and Prisma
 
-### Modelos principais
+### Main Models
 
 ```
 User → RefreshToken
@@ -402,16 +404,16 @@ Customer → Rental → RentalItem → Item → ItemCategory
                  → Return → ReturnItem
                  → Payment → FinancialTransaction
                  → Document
-InventoryMovement (rastreia toda movimentação de estoque)
-AuditLog (rastreia toda mutação com userId, entity, payload)
-ContractCounter (sequência de contratos por ano)
+InventoryMovement (tracks all stock movements)
+AuditLog (tracks all mutations with userId, entity, payload)
+ContractCounter (sequential contract numbering per year)
 ```
 
-### Índices de performance
+### Performance Indexes
 
-Adicionados via migration `20260520174259_add_performance_indexes`:
+Added via migration `20260520174259_add_performance_indexes`:
 
-| Tabela | Campos indexados |
+| Table | Indexed Columns |
 |---|---|
 | `rentals` | `(status, expected_return)`, `(customer_id)` |
 | `payments` | `(rental_id)`, `(paid_at)` |
@@ -419,51 +421,51 @@ Adicionados via migration `20260520174259_add_performance_indexes`:
 | `items` | `(category_id)`, `(is_active)` |
 | `rental_items` | `(rental_id)`, `(item_id)` |
 
-### Comandos Prisma
+### Prisma Commands
 
 ```bash
-# Desenvolvimento — criar e aplicar migration
-npx prisma migrate dev --name nome_da_migration
+# Development — create and apply migration
+npx prisma migrate dev --name migration_name
 
-# Produção — aplicar migrations sem alterar schema
+# Production — apply migrations without changing schema
 npx prisma migrate deploy
 
-# Inspecionar banco no navegador
+# Inspect the database in the browser
 npx prisma studio
 
-# Gerar tipos do Prisma Client
+# Regenerate Prisma Client types
 npx prisma generate
 
-# Seed de demonstração (desenvolvimento)
+# Demo seed (development only)
 npx ts-node prisma/seed-demo.ts
 
-# Reset completo (apenas dev — APAGA TODOS OS DADOS)
+# Full reset (dev only — DESTROYS ALL DATA)
 npx prisma migrate reset --force
 ```
 
-### Migrations aplicadas
+### Applied Migrations
 
-| Migration | Descrição |
+| Migration | Description |
 |---|---|
-| `20260515045555_init` | Schema inicial completo |
-| `20260515144724_plan2_core_modules` | Enums, novos módulos, ContractCounter |
-| `20260515150000_add_payment_id_to_financial_transaction` | Associação pagamento → lançamento |
-| `20260515151000_add_void_fields_to_financial_transaction` | Campos de anulação de lançamento |
-| `20260520174259_add_performance_indexes` | 10 índices de performance |
+| `20260515045555_init` | Full initial schema |
+| `20260515144724_plan2_core_modules` | Enums, new modules, ContractCounter |
+| `20260515150000_add_payment_id_to_financial_transaction` | Payment → financial entry association |
+| `20260515151000_add_void_fields_to_financial_transaction` | Entry voiding fields |
+| `20260520174259_add_performance_indexes` | 10 performance indexes |
 
 ---
 
-## Scripts disponíveis
+## Available Scripts
 
 ### Backend
 
 ```bash
-npm run start:dev     # Dev server com hot reload
-npm run start:prod    # Produção
-npm run build         # Compilar TypeScript
-npm run test          # Rodar suite de testes
-npm run test:watch    # Testes em modo watch
-npm run test:cov      # Testes com cobertura
+npm run start:dev     # Dev server with hot reload
+npm run start:prod    # Production server
+npm run build         # Compile TypeScript
+npm run test          # Run test suite
+npm run test:watch    # Tests in watch mode
+npm run test:cov      # Tests with coverage report
 npm run lint          # ESLint
 npm run prisma:migrate  # prisma migrate dev
 npm run prisma:studio   # Prisma Studio
@@ -472,18 +474,18 @@ npm run prisma:studio   # Prisma Studio
 ### Frontend
 
 ```bash
-npm run dev           # Dev server (Vite)
-npm run build         # Build de produção
-npm run preview       # Preview do build
-npm run test          # Vitest (modo CI)
-npm run test:watch    # Vitest modo watch
-npm run test:coverage # Cobertura de testes
+npm run dev           # Vite dev server
+npm run build         # Production build
+npm run preview       # Preview production build
+npm run test          # Vitest (CI mode)
+npm run test:watch    # Vitest watch mode
+npm run test:coverage # Coverage report
 npm run lint          # ESLint
 ```
 
 ---
 
-## Testes
+## Testing
 
 ### Frontend — Vitest + Testing Library
 
@@ -491,9 +493,9 @@ npm run lint          # ESLint
 cd frontend && npm run test
 ```
 
-- **183 testes** em 25 suites
-- Padrão: `vi.mock` + `setupMocks()` + `renderPage()`
-- Cobertura: todos os componentes de feature, hooks, utils e helpers
+- **183 tests** across 25 suites
+- Pattern: `vi.mock` + `setupMocks()` + `renderPage()`
+- Coverage: all feature components, hooks, utils, and helpers
 
 ```
 src/tests/
@@ -517,9 +519,9 @@ src/tests/
 cd backend && npm run test
 ```
 
-- **190 testes** em 10 suites (193 total, 3 pré-existentes com falha conhecida em `auth.service.spec`)
-- Testes unitários com mocks do PrismaService e dependências
-- Cobertura: todos os services, guards e controllers
+- **190 tests** across 10 suites (193 total, 3 known pre-existing failures in `auth.service.spec`)
+- Unit tests with PrismaService and dependency mocks
+- Coverage: all services, guards, and controllers
 
 ```
 src/modules/
@@ -537,59 +539,59 @@ src/modules/
 
 ---
 
-## Autenticação e RBAC
+## Authentication and RBAC
 
-### Fluxo de autenticação
+### Authentication Flow
 
 ```
 POST /auth/login
-  → valida credenciais
-  → retorna accessToken (15min) + refreshToken (7d)
+  → validates credentials
+  → returns accessToken (15min) + refreshToken (7d)
 
 POST /auth/refresh
-  → valida refreshToken
-  → retorna novo par de tokens (rotação)
+  → validates refreshToken
+  → returns new token pair (rotation)
 
 POST /auth/logout
-  → revoga refreshToken
+  → revokes refreshToken
 
 Axios interceptor (frontend)
-  → injeta accessToken no header Authorization
-  → em 401, tenta refresh automático
-  → se refresh falhar, redireciona para /login
+  → injects accessToken in Authorization header
+  → on 401, attempts automatic refresh
+  → if refresh fails, redirects to /login
 ```
 
-### Papéis e permissões
+### Roles and Permissions
 
-| Recurso | Admin | Atendente | Financeiro |
+| Resource | Admin | Attendant | Financial |
 |---|---|---|---|
-| Dashboard | ✅ completo | ✅ operacional | ✅ financeiro |
-| Clientes | ✅ CRUD | ✅ CRUD | 👁️ read |
-| Estoque | ✅ CRUD | ✅ read | 👁️ read |
-| Locações | ✅ CRUD | ✅ criar/ver | 👁️ read |
-| Devoluções | ✅ | ✅ | ❌ |
-| Pagamentos | ✅ | ❌ | ✅ |
-| Financeiro | ✅ | ❌ | ✅ |
-| Documentos | ✅ | ✅ | ✅ |
-| Calendário | ✅ | ✅ | ❌ |
+| Dashboard | ✅ full | ✅ operational | ✅ financial |
+| Customers | ✅ CRUD | ✅ CRUD | 👁️ read |
+| Inventory | ✅ CRUD | ✅ read | 👁️ read |
+| Rentals | ✅ CRUD | ✅ create/view | 👁️ read |
+| Returns | ✅ | ✅ | ❌ |
+| Payments | ✅ | ❌ | ✅ |
+| Financial | ✅ | ❌ | ✅ |
+| Documents | ✅ | ✅ | ✅ |
+| Calendar | ✅ | ✅ | ❌ |
 
 ---
 
-## Responsividade mobile
+## Mobile Responsiveness
 
-O layout foi construído mobile-first com duas estratégias complementares:
+The layout uses two complementary mobile-first strategies:
 
-### Tabelas → listas compactas
+### Tables → Compact Lists
 
-Todas as páginas de listagem renderizam dois blocos via Tailwind:
+All listing pages render two mutually exclusive blocks via Tailwind:
 
 ```tsx
-{/* Desktop: tabela completa */}
+{/* Desktop: full table */}
 <div className="hidden md:block">
   <Table>...</Table>
 </div>
 
-{/* Mobile: lista compacta uma linha por registro */}
+{/* Mobile: compact one-row-per-record list */}
 <div className="md:hidden divide-y rounded-md border">
   {data.map(item => (
     <div className="flex items-center gap-3 p-3">
@@ -604,48 +606,48 @@ Todas as páginas de listagem renderizam dois blocos via Tailwind:
 </div>
 ```
 
-### FilterPanel colapsável
+### Collapsible FilterPanel
 
-Componente compartilhado pelas páginas com múltiplos filtros (Financeiro, Pagamentos, Documentos):
+Shared component used by pages with multiple filters (Financial, Payments, Documents):
 
-- Desktop: filtros sempre visíveis em layout horizontal
-- Mobile: filtros ocultos atrás de um botão `Filtros` com chips dos filtros ativos
-- Botão "Limpar filtros" aparece quando há filtros ativos
-- Selects com `w-full md:w-{tamanho}` para evitar overflow
+- Desktop: filters always visible in horizontal layout
+- Mobile: filters hidden behind a `Filters` button with active filter chips
+- "Clear filters" button appears when filters are active
+- Selects use `w-full md:w-{size}` to prevent overflow
 
-### Sidebar mobile
+### Mobile Sidebar
 
-- Inicia fechada em telas pequenas (`window.innerWidth < 768`)
-- Ao abrir: overlay semitransparente clicável + scroll lock no body
-- Sidebar é `fixed` (overlay) no mobile e `relative` (in-flow) no desktop
+- Starts closed on small screens (`window.innerWidth < 768`)
+- When opened: clickable semi-transparent overlay + body scroll lock
+- Sidebar is `fixed` (overlay) on mobile and `relative` (in-flow) on desktop
 
-### Calendário responsivo
+### Responsive Calendar
 
-- Toolbar nativa do FullCalendar substituída por toolbar customizada no mobile (dois níveis)
-- `ResizeObserver` chama `updateSize()` ao sidebar abrir/fechar
-- Legenda em grid 2×2 compacto no mobile
+- FullCalendar's native toolbar replaced by a custom two-level toolbar on mobile
+- `ResizeObserver` calls `updateSize()` when the sidebar opens/closes
+- Legend rendered in a compact 2×2 grid on mobile
 
 ---
 
-## Otimizações de performance
+## Performance Optimizations
 
 ### Frontend
 
-**Code splitting com React.lazy**
+**Code splitting with React.lazy**
 
-Todas as rotas são lazy-loaded. O bundle inicial carrega apenas o shell:
+All routes are lazy-loaded. The initial bundle only loads the app shell:
 
 ```tsx
 const DashboardPage = lazy(() => import('@/features/dashboard/...'))
 const CalendarPage  = lazy(() => import('@/features/calendar/...'))
-// ... todas as demais rotas
+// ... all other routes
 ```
 
-**manualChunks no Vite**
+**Vite manualChunks**
 
-Vendors separados em chunks cacheáveis independentemente:
+Vendors split into independently cacheable chunks:
 
-| Chunk | Conteúdo | Gzip |
+| Chunk | Contents | Gzip |
 |---|---|---|
 | `react-vendor` | react, react-dom, react-router | ~52 kB |
 | `query-vendor` | @tanstack/react-query | ~15 kB |
@@ -653,9 +655,9 @@ Vendors separados em chunks cacheáveis independentemente:
 | `charts-vendor` | recharts | ~118 kB |
 | `calendar-vendor` | @fullcalendar/* | ~61 kB |
 | `date-vendor` | date-fns | ~6 kB |
-| `index.js` (app) | código da aplicação | ~45 kB |
+| `index.js` (app) | application code | ~45 kB |
 
-> O bundle principal caiu de **420 kB → 134 kB** gzip (-68%).
+> Main bundle reduced from **420 kB → 134 kB** gzip (-68%).
 
 **TanStack Query**
 
@@ -663,106 +665,106 @@ Vendors separados em chunks cacheáveis independentemente:
 defaultOptions: {
   queries: {
     retry: 1,
-    staleTime: 30_000,   // dados frescos por 30s
-    gcTime: 5 * 60_000,  // removidos da memória após 5min sem uso
+    staleTime: 30_000,   // data considered fresh for 30s
+    gcTime: 5 * 60_000,  // removed from memory after 5min of inactivity
   },
 }
 ```
 
 ### Backend
 
-**Aggregate no lugar de findMany + reduce**
+**Aggregate instead of findMany + reduce**
 
 ```ts
-// Antes: carregava todos os itens em memória
+// Before: loaded all items into memory
 const items = await this.prisma.item.findMany({ where: { isActive: true }, select: {...} })
 const total = items.reduce(...)
 
-// Depois: query de agregação no banco
+// After: database aggregation query
 const agg = await this.prisma.item.aggregate({
   where: { isActive: true },
   _sum: { totalQty: true, availableQty: true, rentedQty: true, maintenanceQty: true },
 })
 ```
 
-**Remoção de N+1 na criação de locação**
+**N+1 removal in rental creation**
 
 ```ts
-// Antes: N queries para N itens
+// Before: N queries for N items
 for (const ri of dto.items) {
   const item = await tx.item.findUnique({ where: { id: ri.itemId } })
 }
 
-// Depois: 1 query para todos
+// After: 1 query for all items
 const items = await tx.item.findMany({
   where: { id: { in: dto.items.map(r => r.itemId) } },
 })
 const itemMap = new Map(items.map(i => [i.id, i]))
 ```
 
-**10 índices de banco adicionados** para os filtros mais frequentes (ver seção [Banco de dados](#banco-de-dados-e-prisma)).
+**10 database indexes added** for the most frequently queried fields (see [Database and Prisma](#database-and-prisma)).
 
 ---
 
-## Segurança
+## Security
 
-### Camadas de proteção
+### Defense in Depth
 
-| Camada | Mecanismo |
+| Layer | Mechanism |
 |---|---|
-| Transporte | Helmet (headers HTTP seguros) |
-| Autenticação | JWT com refresh rotation, bcrypt no hash de senha |
-| Autorização | Guards NestJS por role em todos os endpoints |
-| Validação de entrada | `class-validator` nos DTOs (backend) + Zod nos forms (frontend) |
-| CORS | Allowlist explícita de origens (`FRONTEND_URL`) |
-| Audit log | Registro de todas as mutações com userId, entity, payload, IP |
+| Transport | Helmet (secure HTTP headers) |
+| Authentication | JWT with refresh rotation, bcrypt password hashing |
+| Authorization | NestJS role guards on all endpoints |
+| Input validation | `class-validator` on DTOs (backend) + Zod on forms (frontend) |
+| CORS | Explicit origin allowlist (`FRONTEND_URL`) |
+| Audit log | All mutations logged with userId, entity, payload, and IP |
 
-### Proteção por profundidade
+### Additional Protections
 
-- **Frontend**: rotas protegidas com `ProtectedRoute` e `RoleGuard`
-- **Backend**: guards validam JWT e role antes de qualquer handler
-- **Banco**: queries usam IDs gerados pelo servidor (UUID v4), nunca IDs do cliente
+- **Frontend**: routes protected with `ProtectedRoute` and `RoleGuard`
+- **Backend**: guards validate JWT and role before any handler runs
+- **Database**: queries use server-generated UUIDs, never client-supplied IDs
 
 ---
 
-## Decisões técnicas
+## Technical Decisions
 
-| Decisão | Motivação |
+| Decision | Rationale |
 |---|---|
-| **Prisma 7** com `prisma.config.ts` | API nova com `defineConfig()` + `@prisma/adapter-pg`; o `schema.prisma` não usa `datasource url` diretamente |
-| **Status computado** no rental | `overdue` não é salvo no banco — calculado em runtime comparando `expectedReturn` com hoje; evita inconsistência e queries de atualização em batch |
-| **Dual-render mobile** (tabela + lista) | Mais simples e flexível que um `<ResponsiveTable>` genérico — cada página tem render específico |
-| **FilterPanel** como abstração | A lógica de expand/collapse e chips é idêntica nas 3 páginas com filtros complexos |
-| **PDFKit server-side** | Geração de PDF no backend garante template consistente e sem dependência do browser |
-| **Aggregate no dashboard** | Evita carregar N itens em memória para apenas somar quantidades |
-| **ResizeObserver no calendário** | FullCalendar só escuta `window.resize`, não mudanças de container — o observer resolve a sidebar toggle |
-| **gcTime no QueryClient** | Sem esse parâmetro, queries antigas ficam em memória indefinidamente |
-| **manualChunks separados** | Vendors pesados (Recharts, FullCalendar) não bloqueiam o carregamento inicial |
+| **Prisma 7** with `prisma.config.ts` | New API with `defineConfig()` + `@prisma/adapter-pg`; `schema.prisma` no longer holds the datasource URL directly |
+| **Computed rental status** | `overdue` is not stored in the DB — calculated at runtime by comparing `expectedReturn` with today; avoids inconsistency and batch update queries |
+| **Dual-render mobile** (table + list) | Simpler and more flexible than a generic `<ResponsiveTable>` — each page has its own specific render logic |
+| **FilterPanel abstraction** | Expand/collapse logic and chip display are identical across the 3 pages with complex filters |
+| **Server-side PDFKit** | Backend PDF generation ensures consistent templates without browser dependency |
+| **Aggregate in dashboard** | Avoids loading N items into memory just to sum quantities |
+| **ResizeObserver in calendar** | FullCalendar only listens to `window.resize`, not DOM mutations — the observer handles sidebar toggle layout changes |
+| **gcTime in QueryClient** | Without this parameter, unused queries remain in memory indefinitely |
+| **Separate manualChunks** | Heavy vendors (Recharts, FullCalendar) don't block the initial page load |
 
 ---
 
 ## Roadmap
 
-- [ ] **TypeScript strict mode** no backend (`strictNullChecks`, `noImplicitAny`)
-- [ ] **Notificações in-app** para devoluções próximas do vencimento
-- [ ] **Relatórios exportáveis** (CSV/Excel) com os mesmos filtros das telas
-- [ ] **Upload real de PDFs** para storage (S3/MinIO) em vez de geração on-demand
-- [ ] **Multi-tenant** — isolamento de dados por empresa
-- [ ] **Integração PIX** via API (Mercado Pago / PagSeguro)
-- [ ] **Configurações de empresa** — taxas padrão, carência, logo no PDF
-- [ ] **Range loading no calendário** — filtrar por período diretamente na view
-- [ ] **CI/CD** — GitHub Actions com lint, testes, build e deploy automatizado
-- [ ] **Testes E2E** com Playwright (fluxo locação → pagamento → devolução)
-- [ ] **PWA** — suporte offline básico para consultas em campo
+- [ ] **TypeScript strict mode** in the backend (`strictNullChecks`, `noImplicitAny`)
+- [ ] **In-app notifications** for rentals approaching their return date
+- [ ] **Exportable reports** (CSV/Excel) using the same filters as the list pages
+- [ ] **Real PDF storage** to S3/MinIO instead of on-demand generation
+- [ ] **Multi-tenant** — data isolation per company
+- [ ] **PIX payment integration** via API (Mercado Pago / PagSeguro)
+- [ ] **Company settings** — default rates, grace periods, logo in PDF
+- [ ] **Calendar range loading** — filter by period directly in the view
+- [ ] **CI/CD** — GitHub Actions pipeline with lint, tests, build, and deploy
+- [ ] **E2E tests** with Playwright (full rental → payment → return flow)
+- [ ] **PWA** — basic offline support for field use
 
 ---
 
-## Autor
+## Author
 
 **Victor Cassio**
 - GitHub: [@victorcassio](https://github.com/victorcassio)
-- E-mail: victorcassiolol@gmail.com
+- Email: victorcassiolol@gmail.com
 
 ---
 
-*Projeto desenvolvido como sistema completo de gestão operacional e financeira para empresas de aluguel de equipamentos.*
+*A complete operational and financial management system for equipment rental companies.*
