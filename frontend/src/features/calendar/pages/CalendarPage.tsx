@@ -30,6 +30,19 @@ export function CalendarPage() {
   const [isMobile, setIsMobile] = useState(getIsMobile)
   const [calendarTitle, setCalendarTitle] = useState('')
   const [currentView, setCurrentView] = useState('dayGridMonth')
+  const calendarWrapperRef = useRef<HTMLDivElement>(null)
+
+  // Recalculate FullCalendar layout whenever the container resizes
+  // (e.g. sidebar open/close changes the main content area width)
+  useEffect(() => {
+    const el = calendarWrapperRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      calendarRef.current?.getApi().updateSize()
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const handleResize = () => setIsMobile(getIsMobile())
@@ -143,6 +156,7 @@ export function CalendarPage() {
       )}
 
       {hasData && (
+        <div ref={calendarWrapperRef}>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, listPlugin]}
@@ -162,6 +176,7 @@ export function CalendarPage() {
           height="auto"
           datesSet={({ view }) => setCalendarTitle(view.title)}
         />
+        </div>
       )}
     </div>
   )
