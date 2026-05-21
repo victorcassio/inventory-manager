@@ -1,11 +1,13 @@
 import { IsEmail, IsString, MinLength, MaxLength } from 'class-validator';
 
+const GENERIC = { message: 'Credenciais inválidas' };
+
 export class LoginDto {
-  @IsEmail({}, { message: 'Email inválido' })
+  @IsEmail({}, GENERIC)
   email: string;
 
-  @IsString()
-  @MinLength(8, { message: 'Senha deve ter no mínimo 8 caracteres' })
-  @MaxLength(100)
+  @IsString(GENERIC)
+  @MinLength(1, GENERIC)
+  @MaxLength(200, GENERIC)
   password: string;
 }

@@ -31,6 +31,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+    deleteMany: jest.fn(),
   },
   user: {
     update: jest.fn(),
@@ -100,6 +101,12 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
+    beforeEach(() => {
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+      mockPrisma.refreshToken.deleteMany.mockResolvedValue({ count: 0 });
+      mockPrisma.user.update.mockResolvedValue({});
+    });
+
     it('retorna access e refresh tokens e dados do usuário', async () => {
       const updatedUser = {
         id: mockUser.id,
@@ -114,7 +121,6 @@ describe('AuthService', () => {
       mockJwtService.signAsync
         .mockResolvedValueOnce('access-token-xyz')
         .mockResolvedValueOnce('refresh-token-xyz');
-      mockPrisma.refreshToken.create.mockResolvedValue({});
       mockPrisma.user.update.mockResolvedValue(updatedUser);
 
       const tokens = await service.login(mockUser as any);
@@ -130,8 +136,6 @@ describe('AuthService', () => {
       mockJwtService.signAsync
         .mockResolvedValueOnce('at')
         .mockResolvedValueOnce('rt');
-      mockPrisma.refreshToken.create.mockResolvedValue({});
-      mockPrisma.user.update.mockResolvedValue({});
 
       await service.login(mockUser as any);
 
@@ -144,8 +148,6 @@ describe('AuthService', () => {
 
     it('atualiza lastLogin do usuário', async () => {
       mockJwtService.signAsync.mockResolvedValue('token');
-      mockPrisma.refreshToken.create.mockResolvedValue({});
-      mockPrisma.user.update.mockResolvedValue({});
 
       await service.login(mockUser as any);
 
@@ -155,6 +157,22 @@ describe('AuthService', () => {
           data: expect.objectContaining({ lastLogin: expect.any(Date) }),
         }),
       );
+    });
+
+    it('executa cleanup de tokens revogados e expirados do usuário', async () => {
+      mockJwtService.signAsync.mockResolvedValue('token');
+
+      await service.login(mockUser as any);
+
+      expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: mockUser.id,
+          OR: [
+            { revoked: true },
+            { expiresAt: { lt: expect.any(Date) } },
+          ],
+        },
+      });
     });
   });
 

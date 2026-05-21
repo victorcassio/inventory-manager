@@ -44,6 +44,15 @@ export class AuthService {
   async login(user: User): Promise<TokensDto> {
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
+
+    // Cleanup revoked and expired tokens for this user to prevent table growth
+    await this.prisma.refreshToken.deleteMany({
+      where: {
+        userId: user.id,
+        OR: [{ revoked: true }, { expiresAt: { lt: new Date() } }],
+      },
+    });
+
     const updated = await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() },
