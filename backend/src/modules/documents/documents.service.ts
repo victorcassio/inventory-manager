@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { DocumentStatus, DocumentType } from '@prisma/client';
@@ -14,6 +14,20 @@ interface DownloadResult {
   filename: string;
   mimeType: string;
 }
+
+// Fields safe to expose publicly — path (filesystem) is intentionally excluded
+const DOCUMENT_PUBLIC_SELECT = {
+  id: true,
+  type: true,
+  status: true,
+  filename: true,
+  rentalId: true,
+  customerId: true,
+  paymentId: true,
+  returnId: true,
+  userId: true,
+  createdAt: true,
+} as const;
 
 interface ListDocumentsQuery {
   page?: number;
@@ -57,6 +71,7 @@ export class DocumentsService {
         customerId: rental.customerId,
         userId,
       },
+      select: DOCUMENT_PUBLIC_SELECT,
     });
 
     await this.audit.log({
@@ -64,13 +79,7 @@ export class DocumentsService {
       action: 'generate_document',
       entity: 'Document',
       entityId: document.id,
-      payload: {
-        type: 'contract',
-        rentalId: rental.id,
-        customerId: rental.customerId,
-        filename,
-        path: filePath,
-      } as any,
+      payload: { type: 'contract', rentalId: rental.id, customerId: rental.customerId, filename } as any,
     });
 
     return document;
@@ -102,6 +111,7 @@ export class DocumentsService {
         paymentId,
         userId,
       },
+      select: DOCUMENT_PUBLIC_SELECT,
     });
 
     await this.audit.log({
@@ -109,14 +119,7 @@ export class DocumentsService {
       action: 'generate_document',
       entity: 'Document',
       entityId: document.id,
-      payload: {
-        type: 'receipt',
-        rentalId: payment.rentalId,
-        customerId: payment.rental?.customerId,
-        paymentId,
-        filename,
-        path: filePath,
-      } as any,
+      payload: { type: 'receipt', rentalId: payment.rentalId, customerId: payment.rental?.customerId, paymentId, filename } as any,
     });
 
     return document;
@@ -152,6 +155,7 @@ export class DocumentsService {
         returnId,
         userId,
       },
+      select: DOCUMENT_PUBLIC_SELECT,
     });
 
     await this.audit.log({
@@ -159,14 +163,7 @@ export class DocumentsService {
       action: 'generate_document',
       entity: 'Document',
       entityId: document.id,
-      payload: {
-        type: 'return_proof',
-        rentalId: returnRecord.rentalId,
-        customerId: returnRecord.rental?.customerId,
-        returnId,
-        filename,
-        path: filePath,
-      } as any,
+      payload: { type: 'return_proof', rentalId: returnRecord.rentalId, customerId: returnRecord.rental?.customerId, returnId, filename } as any,
     });
 
     return document;
@@ -177,13 +174,21 @@ export class DocumentsService {
   async listDocumentsByRental(rentalId: string): Promise<any[]> {
     return this.prisma.document.findMany({
       where: { rentalId },
+      select: DOCUMENT_PUBLIC_SELECT,
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async downloadDocument(documentId: string): Promise<DownloadResult> {
-    const document = await this.prisma.document.findUnique({ where: { id: documentId } });
+    const document = await this.prisma.document.findUnique({
+      where: { id: documentId },
+      select: { id: true, path: true, filename: true, status: true },
+    });
     if (!document) throw new NotFoundException('Document not found');
+
+    if (document.status === 'voided') {
+      throw new ForbiddenException('Este documento foi anulado e não pode ser baixado');
+    }
 
     try {
       await fs.access(document.path);
@@ -221,7 +226,8 @@ export class DocumentsService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
+        select: {
+          ...DOCUMENT_PUBLIC_SELECT,
           rental: {
             select: {
               id: true,

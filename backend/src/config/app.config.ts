@@ -13,11 +13,23 @@ export default registerAs('app', () => {
     }
   }
 
-  if (
-    process.env.JWT_ACCESS_SECRET &&
-    process.env.JWT_ACCESS_SECRET.length < 32
-  ) {
+  if (process.env.JWT_ACCESS_SECRET && process.env.JWT_ACCESS_SECRET.length < 32) {
     throw new Error('JWT_ACCESS_SECRET must be at least 32 characters');
+  }
+
+  if (process.env.JWT_REFRESH_SECRET && process.env.JWT_REFRESH_SECRET.length < 32) {
+    throw new Error('JWT_REFRESH_SECRET must be at least 32 characters');
+  }
+
+  // Warn (or fail) if running in production with obviously insecure placeholder secrets
+  const insecurePatterns = ['secret', 'test', 'example', 'changeme', 'placeholder'];
+  if (process.env.NODE_ENV === 'production') {
+    for (const secret of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']) {
+      const val = (process.env[secret] ?? '').toLowerCase();
+      if (insecurePatterns.some(p => val.includes(p))) {
+        throw new Error(`${secret} contains an insecure placeholder value. Generate a strong random secret for production.`);
+      }
+    }
   }
 
   return {

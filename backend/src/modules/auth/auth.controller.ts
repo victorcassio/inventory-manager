@@ -20,7 +20,7 @@ import { User } from '@prisma/client';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Throttle({ global: { ttl: 60_000, limit: 10 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto) {
@@ -31,6 +31,7 @@ export class AuthController {
     return this.authService.login(user);
   }
 
+  @Throttle({ global: { ttl: 60_000, limit: 15 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() dto: RefreshTokenDto) {

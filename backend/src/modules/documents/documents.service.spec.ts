@@ -15,7 +15,7 @@ jest.mock('fs/promises', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DocumentStatus, DocumentType, RentalStatus } from '@prisma/client';
 import { DocumentsService } from './documents.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -342,6 +342,59 @@ describe('DocumentsService', () => {
       (fsMock.access as jest.Mock).mockRejectedValue(new Error('ENOENT'));
       await expect(service.downloadDocument('doc-1')).rejects.toThrow(NotFoundException);
     });
+
+    // ─── Security tests ─────────────────────────────────────────────────────
+
+    it('throws ForbiddenException when document is voided', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({
+        ...baseDocument,
+        status: DocumentStatus.voided,
+      });
+      await expect(service.downloadDocument('doc-1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('does not attempt file access for voided documents', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({
+        ...baseDocument,
+        status: DocumentStatus.voided,
+      });
+      try { await service.downloadDocument('doc-1') } catch { /* expected */ }
+      expect(fsMock.access).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Security: path not exposed ──────────────────────────────────────────
+
+  describe('security: path não é exposto nos responses', () => {
+    it('generateContract não retorna campo path', async () => {
+      mockPrisma.rental.findUnique.mockResolvedValue({
+        ...baseDocument,
+        customer: baseDocument,
+        rentalItems: [],
+      });
+      const created = { ...baseDocument };
+      delete (created as any).path;
+      mockPrisma.document.create.mockResolvedValue(created);
+      const result = await service.generateContract('rental-1', 'user-1');
+      expect((result as any).path).toBeUndefined();
+    });
+
+    it('listDocuments não inclui path no select', async () => {
+      mockPrisma.document.findMany.mockResolvedValue([]);
+      mockPrisma.document.count.mockResolvedValue(0);
+      await service.listDocuments({});
+      const call = mockPrisma.document.findMany.mock.calls[0][0];
+      expect(call.select).toBeDefined();
+      expect(call.select.path).toBeUndefined();
+    });
+
+    it('listDocumentsByRental não inclui path no select', async () => {
+      mockPrisma.document.findMany.mockResolvedValue([]);
+      await service.listDocumentsByRental('rental-1');
+      const call = mockPrisma.document.findMany.mock.calls[0][0];
+      expect(call.select).toBeDefined();
+      expect(call.select.path).toBeUndefined();
+    });
   });
 
   // ─── listDocuments ────────────────────────────────────────────────────────
@@ -365,13 +418,13 @@ describe('DocumentsService', () => {
       expect(result.limit).toBe(20);
     });
 
-    it('inclui rental no findMany', async () => {
+    it('usa select sem path e inclui rental', async () => {
       await service.listDocuments({});
-      expect(mockPrisma.document.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          include: expect.objectContaining({ rental: expect.anything() }),
-        }),
-      );
+      const call = mockPrisma.document.findMany.mock.calls[0][0];
+      // path must NOT be in select
+      expect(call.select?.path).toBeUndefined();
+      // rental must be in select
+      expect(call.select?.rental).toBeDefined();
     });
 
     it('filtra por type quando fornecido', async () => {
@@ -395,11 +448,11 @@ describe('DocumentsService', () => {
       );
     });
 
-    it('filtra por dateFrom e dateTo', async () => {
+    it('filtra por dateFrom e dateTo usando lt (dia seguinte exclusivo)', async () => {
       await service.listDocuments({ dateFrom: '2026-05-01', dateTo: '2026-05-31' });
       expect(mockPrisma.document.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ createdAt: { gte: expect.any(Date), lte: expect.any(Date) } }),
+          where: expect.objectContaining({ createdAt: { gte: expect.any(Date), lt: expect.any(Date) } }),
         }),
       );
     });

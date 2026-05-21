@@ -210,14 +210,14 @@ describe('FinancialService', () => {
       );
     });
 
-    it('filters by dateFrom and dateTo', async () => {
+    it('filters by dateFrom and dateTo using lt (day after, exclusive)', async () => {
       await service.listTransactions({ dateFrom: '2026-05-01', dateTo: '2026-05-31' });
       expect(mockPrisma.financialTransaction.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             date: expect.objectContaining({
               gte: expect.any(Date),
-              lte: expect.any(Date),
+              lt: expect.any(Date),
             }),
           }),
         }),
