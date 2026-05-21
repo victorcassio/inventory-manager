@@ -16,7 +16,7 @@ jest.mock('fs/promises', () => ({
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { DocumentStatus, DocumentType, RentalStatus } from '@prisma/client';
+import { DocumentStatus, DocumentType, RentalStatus, UserRole } from '@prisma/client';
 import { DocumentsService } from './documents.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -324,7 +324,7 @@ describe('DocumentsService', () => {
       mockPrisma.document.findUnique.mockResolvedValue(baseDocument);
       (fsMock.access as jest.Mock).mockResolvedValue(undefined);
 
-      const result = await service.downloadDocument('doc-1');
+      const result = await service.downloadDocument('doc-1', UserRole.admin);
       expect(result).toMatchObject({
         path: baseDocument.path,
         filename: baseDocument.filename,
@@ -334,23 +334,23 @@ describe('DocumentsService', () => {
 
     it('throws NotFoundException when document record does not exist', async () => {
       mockPrisma.document.findUnique.mockResolvedValue(null);
-      await expect(service.downloadDocument('doc-1')).rejects.toThrow(NotFoundException);
+      await expect(service.downloadDocument('doc-1', UserRole.admin)).rejects.toThrow(NotFoundException);
     });
 
     it('throws NotFoundException when physical file does not exist on disk', async () => {
       mockPrisma.document.findUnique.mockResolvedValue(baseDocument);
       (fsMock.access as jest.Mock).mockRejectedValue(new Error('ENOENT'));
-      await expect(service.downloadDocument('doc-1')).rejects.toThrow(NotFoundException);
+      await expect(service.downloadDocument('doc-1', UserRole.admin)).rejects.toThrow(NotFoundException);
     });
 
-    // ─── Security tests ─────────────────────────────────────────────────────
+    // ─── voided ─────────────────────────────────────────────────────────────
 
     it('throws ForbiddenException when document is voided', async () => {
       mockPrisma.document.findUnique.mockResolvedValue({
         ...baseDocument,
         status: DocumentStatus.voided,
       });
-      await expect(service.downloadDocument('doc-1')).rejects.toThrow(ForbiddenException);
+      await expect(service.downloadDocument('doc-1', UserRole.admin)).rejects.toThrow(ForbiddenException);
     });
 
     it('does not attempt file access for voided documents', async () => {
@@ -358,7 +358,66 @@ describe('DocumentsService', () => {
         ...baseDocument,
         status: DocumentStatus.voided,
       });
-      try { await service.downloadDocument('doc-1') } catch { /* expected */ }
+      try { await service.downloadDocument('doc-1', UserRole.admin) } catch { /* expected */ }
+      expect(fsMock.access).not.toHaveBeenCalled();
+    });
+
+    // ─── IDOR: RBAC por tipo de documento ───────────────────────────────────
+
+    it('admin can download contract', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.contract });
+      (fsMock.access as jest.Mock).mockResolvedValue(undefined);
+      await expect(service.downloadDocument('doc-1', UserRole.admin)).resolves.toBeDefined();
+    });
+
+    it('admin can download receipt', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.receipt });
+      (fsMock.access as jest.Mock).mockResolvedValue(undefined);
+      await expect(service.downloadDocument('doc-1', UserRole.admin)).resolves.toBeDefined();
+    });
+
+    it('admin can download return_proof', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.return_proof });
+      (fsMock.access as jest.Mock).mockResolvedValue(undefined);
+      await expect(service.downloadDocument('doc-1', UserRole.admin)).resolves.toBeDefined();
+    });
+
+    it('attendant can download contract', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.contract });
+      (fsMock.access as jest.Mock).mockResolvedValue(undefined);
+      await expect(service.downloadDocument('doc-1', UserRole.attendant)).resolves.toBeDefined();
+    });
+
+    it('attendant can download return_proof', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.return_proof });
+      (fsMock.access as jest.Mock).mockResolvedValue(undefined);
+      await expect(service.downloadDocument('doc-1', UserRole.attendant)).resolves.toBeDefined();
+    });
+
+    it('attendant cannot download receipt', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.receipt });
+      await expect(service.downloadDocument('doc-1', UserRole.attendant)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('financial can download receipt', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.receipt });
+      (fsMock.access as jest.Mock).mockResolvedValue(undefined);
+      await expect(service.downloadDocument('doc-1', UserRole.financial)).resolves.toBeDefined();
+    });
+
+    it('financial cannot download contract', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.contract });
+      await expect(service.downloadDocument('doc-1', UserRole.financial)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('financial cannot download return_proof', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.return_proof });
+      await expect(service.downloadDocument('doc-1', UserRole.financial)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('filesystem is not accessed when role is unauthorized', async () => {
+      mockPrisma.document.findUnique.mockResolvedValue({ ...baseDocument, type: DocumentType.receipt });
+      try { await service.downloadDocument('doc-1', UserRole.attendant) } catch { /* expected */ }
       expect(fsMock.access).not.toHaveBeenCalled();
     });
   });

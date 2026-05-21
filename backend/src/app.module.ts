@@ -14,6 +14,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { FinancialModule } from './modules/financial/financial.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { HealthModule } from './modules/health/health.module';
 import appConfig from './config/app.config';
 
 @Module({
@@ -42,6 +43,7 @@ import appConfig from './config/app.config';
     FinancialModule,
     DocumentsModule,
     DashboardModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

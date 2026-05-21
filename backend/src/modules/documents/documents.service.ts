@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { DocumentStatus, DocumentType } from '@prisma/client';
+import { DocumentStatus, DocumentType, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PaginatedResult } from '../../common/types/paginated-result.interface';
@@ -179,15 +179,25 @@ export class DocumentsService {
     });
   }
 
-  async downloadDocument(documentId: string): Promise<DownloadResult> {
+  async downloadDocument(documentId: string, userRole: UserRole): Promise<DownloadResult> {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
-      select: { id: true, path: true, filename: true, status: true },
+      select: { id: true, path: true, filename: true, status: true, type: true },
     });
     if (!document) throw new NotFoundException('Document not found');
 
-    if (document.status === 'voided') {
+    if (document.status === DocumentStatus.voided) {
       throw new ForbiddenException('Este documento foi anulado e não pode ser baixado');
+    }
+
+    const allowedTypes: Record<UserRole, DocumentType[]> = {
+      [UserRole.admin]: [DocumentType.contract, DocumentType.receipt, DocumentType.return_proof],
+      [UserRole.attendant]: [DocumentType.contract, DocumentType.return_proof],
+      [UserRole.financial]: [DocumentType.receipt],
+    };
+
+    if (!allowedTypes[userRole]?.includes(document.type)) {
+      throw new ForbiddenException('Você não tem permissão para baixar este tipo de documento');
     }
 
     try {

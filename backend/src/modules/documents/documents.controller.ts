@@ -72,8 +72,9 @@ export class DocumentsController {
   async downloadDocument(
     @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,
+    @Request() req: any,
   ) {
-    const { path, filename, mimeType } = await this.documentsService.downloadDocument(id);
+    const { path, filename, mimeType } = await this.documentsService.downloadDocument(id, req.user.role);
     res.set({
       'Content-Type': mimeType,
       'Content-Disposition': `attachment; filename="${filename}"`,
