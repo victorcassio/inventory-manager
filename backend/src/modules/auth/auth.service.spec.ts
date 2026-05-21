@@ -100,18 +100,29 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('retorna access e refresh tokens', async () => {
+    it('retorna access e refresh tokens e dados do usuário', async () => {
+      const updatedUser = {
+        id: mockUser.id,
+        name: mockUser.name,
+        email: mockUser.email,
+        role: mockUser.role,
+        isActive: mockUser.isActive,
+        lastLogin: new Date(),
+        createdAt: mockUser.createdAt,
+        updatedAt: mockUser.updatedAt,
+      };
       mockJwtService.signAsync
         .mockResolvedValueOnce('access-token-xyz')
         .mockResolvedValueOnce('refresh-token-xyz');
       mockPrisma.refreshToken.create.mockResolvedValue({});
-      mockPrisma.user.update.mockResolvedValue({});
+      mockPrisma.user.update.mockResolvedValue(updatedUser);
 
       const tokens = await service.login(mockUser as any);
 
-      expect(tokens).toEqual({
+      expect(tokens).toMatchObject({
         accessToken: 'access-token-xyz',
         refreshToken: 'refresh-token-xyz',
+        user: expect.objectContaining({ id: mockUser.id, email: mockUser.email }),
       });
     });
 
