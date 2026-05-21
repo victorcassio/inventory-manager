@@ -23,6 +23,7 @@ Designed for companies that rent scaffolding, tools, generators, construction eq
 - [Mobile Responsiveness](#mobile-responsiveness)
 - [Performance Optimizations](#performance-optimizations)
 - [Security](#security)
+- [Deploy](#deploy)
 - [Technical Decisions](#technical-decisions)
 - [Roadmap](#roadmap)
 - [Author](#author)
@@ -493,7 +494,7 @@ npm run lint          # ESLint
 cd frontend && npm run test
 ```
 
-- **183 tests** across 25 suites
+- **183 tests** across 25 suites (183/183 passing)
 - Pattern: `vi.mock` + `setupMocks()` + `renderPage()`
 - Coverage: all feature components, hooks, utils, and helpers
 
@@ -519,7 +520,7 @@ src/tests/
 cd backend && npm run test
 ```
 
-- **190 tests** across 10 suites (193 total, 3 known pre-existing failures in `auth.service.spec`)
+- **199 tests** across 10 suites (199/199 passing)
 - Unit tests with PrismaService and dependency mocks
 - Coverage: all services, guards, and controllers
 
@@ -712,18 +713,110 @@ const itemMap = new Map(items.map(i => [i.id, i]))
 
 | Layer | Mechanism |
 |---|---|
-| Transport | Helmet (secure HTTP headers) |
+| Transport | Helmet (secure HTTP headers: CSP, HSTS, X-Frame, X-Content-Type) |
 | Authentication | JWT with refresh rotation, bcrypt password hashing |
 | Authorization | NestJS role guards on all endpoints |
 | Input validation | `class-validator` on DTOs (backend) + Zod on forms (frontend) |
-| CORS | Explicit origin allowlist (`FRONTEND_URL`) |
+| CORS | Explicit origin allowlist (`FRONTEND_URL`) — unknown origins blocked |
+| Rate limiting | Login: 10/min · Refresh: 15/min · Global: 100/min |
 | Audit log | All mutations logged with userId, entity, payload, and IP |
+| Token cleanup | Expired and revoked refresh tokens purged on every login |
 
 ### Additional Protections
 
-- **Frontend**: routes protected with `ProtectedRoute` and `RoleGuard`
-- **Backend**: guards validate JWT and role before any handler runs
-- **Database**: queries use server-generated UUIDs, never client-supplied IDs
+- **Frontend**: routes protected with `ProtectedRoute` and `RoleGuard`; `ReactQueryDevtools` disabled in production
+- **Backend**: guards validate JWT and role before any handler runs; filesystem paths never exposed in API responses; auth error messages are generic to prevent enumeration
+- **Database**: queries use server-generated UUIDs; filesystem paths never returned in responses
+- **Startup validation**: app refuses to start in `NODE_ENV=production` if JWT secrets are absent or contain weak placeholder values
+
+### Deploy Security Checklist
+
+Before every production deploy, follow the checklist at [`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md). It covers secrets rotation, environment variables, database safety, CORS/headers validation, and a pre-go-live sign-off checklist.
+
+---
+
+## Deploy
+
+### Recommended free stack (zero cost for testing)
+
+| Layer | Service | Cost |
+|---|---|---|
+| Frontend | [Vercel](https://vercel.com) | Free |
+| Backend (NestJS) | [Render](https://render.com) | Free (cold start ~30s after 15min idle) |
+| Database (PostgreSQL) | [Neon](https://neon.tech) | Free (0.5 GB) |
+| Keep-alive | [UptimeRobot](https://uptimerobot.com) | Free (ping every 5min → prevents cold start) |
+| Domain / SSL | Free subdomains from each platform | Free |
+
+> For production with consistent uptime, upgrade to Railway (~$5/month for backend + DB) and keep Vercel free for the frontend.
+
+### Deploy steps
+
+#### 1. Database — Neon
+
+1. Create account at `neon.tech`
+2. Create a new project → copy the `DATABASE_URL`
+3. Set in Render environment variables
+
+#### 2. Backend — Render
+
+```bash
+# Build command (in Render dashboard)
+npm install && npm run build
+
+# Start command
+node dist/main
+
+# Environment variables to set:
+NODE_ENV=production
+DATABASE_URL=<neon-connection-string>
+JWT_ACCESS_SECRET=<openssl rand -hex 64>
+JWT_REFRESH_SECRET=<openssl rand -hex 64>
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+PORT=3003
+FRONTEND_URL=https://your-app.vercel.app
+```
+
+After first deploy, run migrations via Render shell:
+```bash
+npx prisma migrate deploy
+```
+
+#### 3. Frontend — Vercel
+
+```bash
+# Build command (auto-detected or set manually)
+npm run build
+
+# Output directory
+dist
+
+# Environment variables to set:
+VITE_API_URL=https://your-api.onrender.com/api/v1
+```
+
+#### 4. UptimeRobot (optional, prevents cold start)
+
+1. Create a free monitor at `uptimerobot.com`
+2. Type: HTTP(s)
+3. URL: `https://your-api.onrender.com/api/v1/health` *(or any valid endpoint)*
+4. Interval: 5 minutes
+
+> **Note:** Add a `/health` endpoint to the backend for a cleaner monitor target — currently any valid route works.
+
+### Production smoke test
+
+After deploy, verify the golden path:
+
+```
+1. Open https://your-app.vercel.app
+2. Log in with production credentials
+3. Create a customer
+4. Create a rental with 2 items
+5. Register a payment
+6. Download the generated PDF receipt
+7. Check the dashboard for updated KPIs
+```
 
 ---
 
