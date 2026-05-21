@@ -854,7 +854,7 @@ Após o deploy, verificar o fluxo principal:
 
 **Victor Cassio**
 - GitHub: [@victorcassio](https://github.com/victorcassio)
-- E-mail: victorcassiolol@gmail.com
+- E-mail: victorcassiov@gmail.com
 
 ---
 

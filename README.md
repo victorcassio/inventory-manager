@@ -856,7 +856,7 @@ After deploy, verify the golden path:
 
 **Victor Cassio**
 - GitHub: [@victorcassio](https://github.com/victorcassio)
-- Email: victorcassiolol@gmail.com
+- Email: victorcassiov@gmail.com
 
 ---
 
