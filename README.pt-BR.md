@@ -520,7 +520,7 @@ src/tests/
 cd backend && npm run test
 ```
 
-- **199 testes** em 10 suites (199/199 passando)
+- **215 testes** em 11 suites (215/215 passando)
 - Testes unitários com mocks do PrismaService e dependências
 - Cobertura: todos os services, guards e controllers
 
@@ -535,6 +535,7 @@ src/modules/
 ├── financial/financial.service.spec.ts
 ├── documents/documents.service.spec.ts
 ├── dashboard/dashboard.service.spec.ts
+├── health/health.controller.spec.ts
 └── audit/audit.service.spec.ts
 ```
 

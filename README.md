@@ -520,7 +520,7 @@ src/tests/
 cd backend && npm run test
 ```
 
-- **199 tests** across 10 suites (199/199 passing)
+- **215 tests** across 11 suites (215/215 passing)
 - Unit tests with PrismaService and dependency mocks
 - Coverage: all services, guards, and controllers
 
@@ -535,6 +535,7 @@ src/modules/
 ├── financial/financial.service.spec.ts
 ├── documents/documents.service.spec.ts
 ├── dashboard/dashboard.service.spec.ts
+├── health/health.controller.spec.ts
 └── audit/audit.service.spec.ts
 ```
 
@@ -799,10 +800,10 @@ VITE_API_URL=https://your-api.onrender.com/api/v1
 
 1. Create a free monitor at `uptimerobot.com`
 2. Type: HTTP(s)
-3. URL: `https://your-api.onrender.com/api/v1/health` *(or any valid endpoint)*
+3. URL: `https://your-api.onrender.com/api/v1/health`
 4. Interval: 5 minutes
 
-> **Note:** Add a `/health` endpoint to the backend for a cleaner monitor target — currently any valid route works.
+> `GET /api/v1/health` requires no authentication and is excluded from rate limiting — ideal for uptime monitors.
 
 ### Production smoke test
 
