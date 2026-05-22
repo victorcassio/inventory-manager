@@ -40,7 +40,7 @@ export function RevenueBarChart({ data }: Props) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value: number | string) => formatCurrency(Number(value))} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
               <Legend />
               <Bar dataKey="Receita" fill="#16a34a" radius={[3, 3, 0, 0]} />
               <Bar dataKey="Despesas" fill="#dc2626" radius={[3, 3, 0, 0]} />

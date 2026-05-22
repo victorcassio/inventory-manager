@@ -45,7 +45,7 @@ export function CumulativeLineChart({ data }: Props) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value: number | string) => formatCurrency(Number(value))} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
               <Area
                 type="monotone"
                 dataKey="Receita Acumulada"
