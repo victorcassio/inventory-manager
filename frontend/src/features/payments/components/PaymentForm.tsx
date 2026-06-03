@@ -39,13 +39,13 @@ export function PaymentForm({ rental, totalDamageFees }: Props) {
             </div>
           )}
           {Number(rental.lateFee) > 0 && (
-            <div className="flex justify-between text-amber-600">
+            <div className="flex justify-between text-amber-600 dark:text-amber-400">
               <span>Multa por Atraso</span>
               <span>{formatCurrency(rental.lateFee)}</span>
             </div>
           )}
           {totalDamageFees > 0 && (
-            <div className="flex justify-between text-amber-600">
+            <div className="flex justify-between text-amber-600 dark:text-amber-400">
               <span>Taxas de Dano</span>
               <span>{formatCurrency(totalDamageFees)}</span>
             </div>
@@ -57,7 +57,7 @@ export function PaymentForm({ rental, totalDamageFees }: Props) {
           </div>
           <div className="flex justify-between font-semibold text-lg">
             <span>Saldo em Aberto</span>
-            <span className={balance > 0 ? 'text-destructive' : 'text-green-600'}>
+            <span className={balance > 0 ? 'text-destructive' : 'text-green-600 dark:text-green-400'}>
               {formatCurrency(balance)}
             </span>
           </div>

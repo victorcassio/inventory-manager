@@ -201,7 +201,7 @@ export function PaymentsListPage() {
                         </TableCell>
                         <TableCell>{payment.rental?.customer?.name ?? '—'}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">{METHOD_LABELS[payment.method] ?? payment.method}</TableCell>
-                        <TableCell className="text-right font-semibold text-green-600">{formatCurrency(payment.amount)}</TableCell>
+                        <TableCell className="text-right font-semibold text-green-600 dark:text-green-400">{formatCurrency(payment.amount)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -218,7 +218,7 @@ export function PaymentsListPage() {
                         {payment.rental ? `#${payment.rental.contractNumber}` : '—'} · {formatDate(payment.paidAt)}
                       </p>
                     </div>
-                    <span className="text-sm font-semibold text-green-600 shrink-0">{formatCurrency(payment.amount)}</span>
+                    <span className="text-sm font-semibold text-green-600 dark:text-green-400 shrink-0">{formatCurrency(payment.amount)}</span>
                   </div>
                 ))}
               </div>

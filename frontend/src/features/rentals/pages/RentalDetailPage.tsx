@@ -166,7 +166,7 @@ export function RentalDetailPage() {
                         <p>{formatCurrency(ri.unitPrice)}/dia</p>
                         <p className="text-muted-foreground">
                           Total: {ri.quantity} | Dev: {ri.returnedQty} |{' '}
-                          <span className={pending > 0 ? 'text-amber-600 font-medium' : 'text-green-600'}>
+                          <span className={pending > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-green-600 dark:text-green-400'}>
                             Pendente: {pending}
                           </span>
                         </p>
@@ -209,13 +209,13 @@ export function RentalDetailPage() {
                 </div>
               )}
               {Number(rental.lateFee) > 0 && (
-                <div className="flex justify-between text-amber-600">
+                <div className="flex justify-between text-amber-600 dark:text-amber-400">
                   <span>Multa por Atraso</span>
                   <span>{formatCurrency(rental.lateFee)}</span>
                 </div>
               )}
               {totalDamageFees > 0 && (
-                <div className="flex justify-between text-amber-600">
+                <div className="flex justify-between text-amber-600 dark:text-amber-400">
                   <span>Taxas de Dano</span>
                   <span>{formatCurrency(totalDamageFees)}</span>
                 </div>
@@ -235,7 +235,7 @@ export function RentalDetailPage() {
               </div>
               <div className="flex justify-between font-semibold">
                 <span>Saldo em Aberto</span>
-                <span className={balance > 0 ? 'text-destructive' : 'text-green-600'}>
+                <span className={balance > 0 ? 'text-destructive' : 'text-green-600 dark:text-green-400'}>
                   {formatCurrency(balance)}
                 </span>
               </div>
@@ -260,7 +260,7 @@ export function RentalDetailPage() {
                       </Badge>
                     </div>
                     {(ret.lateDays > 0 || Number(ret.lateFee) > 0) && (
-                      <p className="text-sm text-amber-600">
+                      <p className="text-sm text-amber-600 dark:text-amber-400">
                         Atraso: {ret.lateDays} dias | Multa: {formatCurrency(ret.lateFee)}
                       </p>
                     )}
@@ -272,7 +272,7 @@ export function RentalDetailPage() {
                             <span className="flex gap-2">
                               <span>{CONDITION_LABEL[ri.condition] ?? ri.condition}</span>
                               {Number(ri.damageFee) > 0 && (
-                                <span className="text-amber-600">{formatCurrency(ri.damageFee)}</span>
+                                <span className="text-amber-600 dark:text-amber-400">{formatCurrency(ri.damageFee)}</span>
                               )}
                             </span>
                           </div>

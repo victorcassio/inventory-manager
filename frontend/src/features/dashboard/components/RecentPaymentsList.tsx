@@ -41,7 +41,7 @@ export function RecentPaymentsList({ payments }: Props) {
                   <p className="text-xs text-muted-foreground">{p.customerName} · {METHOD_LABELS[p.method] ?? p.method}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-green-600">{formatCurrency(p.amount)}</p>
+                  <p className="text-sm font-semibold text-green-600 dark:text-green-400">{formatCurrency(p.amount)}</p>
                   <p className="text-xs text-muted-foreground">{formatDate(p.paidAt)}</p>
                 </div>
               </li>
