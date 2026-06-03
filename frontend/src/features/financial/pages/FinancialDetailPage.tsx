@@ -121,7 +121,7 @@ export function FinancialDetailPage() {
       <Card className={txn.type === 'income' ? 'border-green-200 bg-green-50 dark:bg-green-950' : 'border-red-200 bg-red-50 dark:bg-red-950'}>
         <CardContent className="py-6 text-center">
           <p className="text-sm text-muted-foreground mb-1">Valor</p>
-          <p className={`text-4xl font-bold ${txn.isVoided ? 'line-through text-muted-foreground' : txn.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+          <p className={`text-4xl font-bold ${txn.isVoided ? 'line-through text-muted-foreground' : txn.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
             {txn.type === 'income' ? '+' : '−'}{formatCurrency(txn.amount)}
           </p>
         </CardContent>

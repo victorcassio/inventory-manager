@@ -237,7 +237,7 @@ export function FinancialNewPage() {
                   Use apenas quando este lançamento estiver ligado a uma locação existente.
                 </p>
                 {selectedRental && (
-                  <p className="text-xs text-green-600">
+                  <p className="text-xs text-green-600 dark:text-green-400">
                     ✓ Vinculado ao contrato #{selectedRental.contractNumber}
                   </p>
                 )}

@@ -201,16 +201,16 @@ export function FinancialListPage() {
           <>
             <Card className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
               <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">ENTRADAS</CardTitle></CardHeader>
-              <CardContent><p className="text-2xl font-bold text-green-600">{formatCurrency(summary?.totalIncome ?? 0)}</p></CardContent>
+              <CardContent><p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(summary?.totalIncome ?? 0)}</p></CardContent>
             </Card>
             <Card className="border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
               <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">SAÍDAS</CardTitle></CardHeader>
-              <CardContent><p className="text-2xl font-bold text-red-600">{formatCurrency(summary?.totalExpense ?? 0)}</p></CardContent>
+              <CardContent><p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatCurrency(summary?.totalExpense ?? 0)}</p></CardContent>
             </Card>
             <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
               <CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">SALDO</CardTitle></CardHeader>
               <CardContent>
-                <p className={`text-2xl font-bold ${(summary?.balance ?? 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                <p className={`text-2xl font-bold ${(summary?.balance ?? 0) >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
                   {formatCurrency(summary?.balance ?? 0)}
                 </p>
               </CardContent>
@@ -286,7 +286,7 @@ export function FinancialListPage() {
                           className={`text-right font-semibold ${
                             txn.isVoided
                               ? 'line-through text-muted-foreground'
-                              : txn.type === 'income' ? 'text-green-600' : 'text-red-600'
+                              : txn.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                           }`}
                         >
                           {txn.type === 'income' ? '+' : '−'}{formatCurrency(txn.amount)}
@@ -320,7 +320,7 @@ export function FinancialListPage() {
                         {formatDate(txn.date)} · {CATEGORY_LABELS[txn.category] ?? txn.category}
                       </p>
                     </div>
-                    <span className={`text-sm font-semibold shrink-0 ${txn.isVoided ? 'line-through text-muted-foreground' : txn.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className={`text-sm font-semibold shrink-0 ${txn.isVoided ? 'line-through text-muted-foreground' : txn.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       {txn.type === 'income' ? '+' : '−'}{formatCurrency(txn.amount)}
                     </span>
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />

@@ -30,10 +30,10 @@ export function InventorySection({ data }: Props) {
         <Card className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Disponíveis</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
+            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-green-600">{data.availableItems}</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{data.availableItems}</p>
           </CardContent>
         </Card>
 
