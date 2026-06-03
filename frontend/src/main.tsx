@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import '@/stores/theme.store'
 import { Providers } from './app/providers'
 import { AppRoutes } from './app/routes'
 
