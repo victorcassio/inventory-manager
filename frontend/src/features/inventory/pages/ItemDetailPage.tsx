@@ -92,15 +92,15 @@ export function ItemDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Disponível</p>
-                <p className="text-2xl font-bold text-green-600">{item.availableQty}</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{item.availableQty}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Alugado</p>
-                <p className="text-2xl font-bold text-blue-600">{item.rentedQty}</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{item.rentedQty}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Manutenção</p>
-                <p className="text-2xl font-bold text-orange-600">{item.maintenanceQty}</p>
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{item.maintenanceQty}</p>
               </div>
             </div>
           </CardContent>

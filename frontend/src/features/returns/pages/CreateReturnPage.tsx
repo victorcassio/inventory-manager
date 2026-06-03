@@ -77,7 +77,7 @@ export function CreateReturnPage() {
             <CardTitle>
               Itens a Devolver
               {watchedItems.length > 0 && (
-                <span className={`ml-2 text-sm font-normal ${isFullReturn ? 'text-green-600' : 'text-amber-600'}`}>
+                <span className={`ml-2 text-sm font-normal ${isFullReturn ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
                   {isFullReturn ? '(devolução total)' : '(devolução parcial)'}
                 </span>
               )}
