@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { CreateReturnPage } from '@/features/returns/pages/CreateReturnPage'
 import { useRental } from '@/features/rentals/hooks/useRentals'
@@ -87,7 +86,6 @@ describe('CreateReturnPage', () => {
   })
 
   it('bloqueia submissão sem itens selecionados', async () => {
-    const user = userEvent.setup()
     renderPage()
 
     const submitBtn = screen.getByRole('button', { name: /registrar devolução/i })
