@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useAuthStore } from '@/stores/auth.store'
-import { authApi } from '@/lib/api/auth.api'
 import type { User } from '@/types'
 
 vi.mock('@/stores/auth.store', () => ({

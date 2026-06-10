@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { FinancialNewPage } from '@/features/financial/pages/FinancialNewPage'
 import { useCreateTransaction } from '@/features/financial/hooks/useCreateTransaction'

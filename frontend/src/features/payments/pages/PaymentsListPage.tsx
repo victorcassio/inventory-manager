@@ -48,8 +48,6 @@ export function PaymentsListPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
-  if (user && user.role === 'attendant') return <Navigate to="/403" replace />
-
   const { page, limit, setPage } = usePagination()
   const [preset, setPreset]                 = useState<PeriodPreset>('this_month')
   const [customFrom, setCustomFrom]         = useState('')
@@ -70,6 +68,10 @@ export function PaymentsListPage() {
     rentalId: rentalIdFilter,
     page, limit,
   })
+
+  // All hooks above run unconditionally; guard role-based redirect after them
+  // to satisfy the Rules of Hooks.
+  if (user && user.role === 'attendant') return <Navigate to="/403" replace />
 
   const handlePreset = (p: PeriodPreset) => { setPreset(p); setPage(1) }
 

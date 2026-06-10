@@ -8,7 +8,6 @@ import { ChevronRight, Plus } from 'lucide-react'
 import { FilterPanel } from '@/components/filters/FilterPanel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { DateInput } from '@/components/ui/date-input'
 import { Label } from '@/components/ui/label'
 import {

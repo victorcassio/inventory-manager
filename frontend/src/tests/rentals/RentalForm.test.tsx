@@ -38,8 +38,6 @@ describe('RentalForm', () => {
     const user = userEvent.setup()
     renderForm()
 
-    // Fill in minimum required fields except items
-    const dateInputs = screen.getAllByDisplayValue('')
     // Try submitting without items
     const submitBtn = screen.getByRole('button', { name: /criar locação/i })
     await user.click(submitBtn)

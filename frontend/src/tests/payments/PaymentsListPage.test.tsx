@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { PaymentsListPage } from '@/features/payments/pages/PaymentsListPage'
 import { usePayments } from '@/features/payments/hooks/usePayments'
