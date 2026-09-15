@@ -1393,7 +1393,13 @@ HAVING count(*) > 1;
 SQL
 ```
 
-Expected: no rows. If rows come back, **stop** and resolve them manually — the migration is designed to abort in this situation and must not be worked around.
+Expected: no rows.
+
+**This is a hard gate.** If any row comes back: do **not** modify, merge or delete a single user.
+Stop the task, report the conflicting normalized addresses and the affected user ids, and wait for
+explicit resolution from the human partner before continuing. The migration is designed to abort in
+this situation and must never be worked around, and the same preflight must be run against any
+persistent environment before `prisma migrate deploy` there.
 
 - [ ] **Step 2: Edit the schema**
 
@@ -1573,27 +1579,67 @@ SQL
 
 Expected: every pre-existing user shows `has_password = t`, `verified = t`, `pwd_set = t`, `password_changed_at` NULL; `users_email_normalized_key` appears in the index list.
 
-- [ ] **Step 7: Confirm the guard actually fires**
+- [ ] **Step 7: Confirm the guard actually fires — on a disposable database only**
 
-Prove the abort path works rather than assuming it. On a throwaway copy only:
+Prove the abort path works rather than assuming it. **This test must never touch `inventory_db` or
+any persistent environment.** It runs against a throwaway database created for this test and dropped
+immediately afterwards, so no colliding e-mail is ever inserted anywhere that matters.
 
 ```bash
-npx prisma db execute --stdin <<'SQL'
--- Temporary: two rows that collide only after normalization.
+cd /home/userterras/Documents/inventory-manager/backend
+source ~/.nvm/nvm.sh && nvm use 20.19.4
+
+DISPOSABLE="migration_guard_test_$$"
+BASE_URL="postgresql://inventory_user:inventory_pass_dev@localhost:5440"
+
+# 1. Create the disposable database.
+psql "$BASE_URL/postgres" -c "CREATE DATABASE \"$DISPOSABLE\";"
+
+# 2. Build the pre-migration schema there: apply every migration EXCEPT the new one.
+#    The simplest safe route is to apply all migrations, then drop what the new one added,
+#    so the guard runs against a realistic pre-state.
+DATABASE_URL="$BASE_URL/$DISPOSABLE" npx prisma migrate deploy
+DATABASE_URL="$BASE_URL/$DISPOSABLE" psql "$BASE_URL/$DISPOSABLE" <<'SQL'
+DROP INDEX IF EXISTS "users_email_normalized_key";
+SQL
+
+# 3. Insert two rows that collide only after normalization.
+psql "$BASE_URL/$DISPOSABLE" <<'SQL'
 INSERT INTO users (id, name, email, password, role, is_active, created_at, updated_at)
 VALUES (gen_random_uuid(), 'Dup A', 'dup@test.local', 'x', 'attendant', true, now(), now()),
        (gen_random_uuid(), 'Dup B', ' DUP@TEST.LOCAL ', 'x', 'attendant', true, now(), now());
 SQL
 
-# Re-running the guard block alone must raise:
-npx prisma db execute --file prisma/migrations/*_user_invitations_and_password_tokens/migration.sql || echo "guard fired as expected"
+# 4. The guard must abort with the descriptive message. Capture it.
+psql "$BASE_URL/$DISPOSABLE" -v ON_ERROR_STOP=1 \
+  -f prisma/migrations/*_user_invitations_and_password_tokens/migration.sql \
+  2>&1 | tee /tmp/guard-output.txt || echo "guard fired as expected (non-zero exit)"
 
+grep -q "Migration abortada" /tmp/guard-output.txt && echo "PASS: guard message present"
+
+# 5. Destroy the disposable database unconditionally.
+psql "$BASE_URL/postgres" -c "DROP DATABASE IF EXISTS \"$DISPOSABLE\" WITH (FORCE);"
+psql "$BASE_URL/postgres" -c "SELECT datname FROM pg_database WHERE datname = '$DISPOSABLE';"
+rm -f /tmp/guard-output.txt
+```
+
+Expected: step 4 prints the `Migration abortada: e-mails que colidem apos normalizacao ...` message
+and exits non-zero; step 5's final query returns **zero rows**, proving the disposable database is
+gone. If `psql` is unavailable on the host, run both `psql` invocations inside the Postgres
+container with `docker-compose -f ../docker-compose.dev.yml exec -T postgres psql -U inventory_user`,
+keeping the same create/test/drop sequence.
+
+Confirm `inventory_db` was never touched:
+
+```bash
 npx prisma db execute --stdin <<'SQL'
-DELETE FROM users WHERE email IN ('dup@test.local', ' DUP@TEST.LOCAL ', 'DUP@TEST.LOCAL');
+SELECT count(*) AS colliding FROM (
+  SELECT lower(btrim(email)) FROM users GROUP BY lower(btrim(email)) HAVING count(*) > 1
+) d;
 SQL
 ```
 
-Note: the second insert only succeeds because the normalized index does not yet exist on a fresh database; if it already exists, the insert itself is rejected, which is also a pass. Either way, clean up before continuing.
+Expected: `0`.
 
 - [ ] **Step 8: Run the full backend suite**
 
