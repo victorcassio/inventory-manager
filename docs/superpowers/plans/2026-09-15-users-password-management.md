@@ -6665,7 +6665,7 @@ export function describeApiError(error: unknown): { kind: ErrorKind; messages: s
   const policy = messages.filter(
     (m) =>
       m.includes('caracteres') ||
-      m.includes('senha muito comum') ||
+      m.includes('muito comum') ||
       m.includes('confirmação') ||
       m.includes('diferente da senha atual') ||
       m.includes('Senha atual incorreta'),
@@ -8141,7 +8141,7 @@ Create `frontend/src/tests/users/UsersListPage.test.tsx`:
 
 ```tsx
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -8293,7 +8293,9 @@ describe('UsersListPage', () => {
     expect(await screen.findByText(/todas as sessões serão encerradas/i)).toBeInTheDocument()
     expect(updateStatus).not.toHaveBeenCalled()
 
-    await localUser.click(screen.getByRole('button', { name: 'Desativar', exact: true }))
+    // Two "Desativar" buttons exist now (row + dialog) — scope to the dialog.
+    const dialog = screen.getByRole('alertdialog')
+    await localUser.click(within(dialog).getByRole('button', { name: 'Desativar' }))
     await waitFor(() => expect(updateStatus).toHaveBeenCalledWith('u1', false))
   })
 
