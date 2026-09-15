@@ -524,7 +524,7 @@ describe('HashingService', () => {
     it('produces an argon2id PHC string', async () => {
       const hash = await service.hash('uma senha bem comprida');
       expect(hash.startsWith('$argon2id$')).toBe(true);
-      expect(hash).toContain('m=65536,t=3,p=1');
+      expect(hash).toContain('m=65536,p=1,t=3');
     });
 
     it('produces different hashes for the same password (random salt)', async () => {
@@ -619,7 +619,7 @@ describe('HashingService', () => {
     it('produces an argon2id dummy hash with the same parameters', () => {
       const dummy = (service as any).dummyHash as string;
       expect(dummy.startsWith('$argon2id$')).toBe(true);
-      expect(dummy).toContain('m=65536,t=3,p=1');
+      expect(dummy).toContain('m=65536,p=1,t=3');
     });
   });
 
@@ -2139,7 +2139,7 @@ const mockUser = {
   id: 'user-uuid-1',
   name: 'Admin User',
   email: 'admin@test.com',
-  password: '$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHRzYWx0$aGFzaGhhc2hoYXNoaGFzaA',
+  password: '$argon2id$v=19$m=65536,p=1,t=3$c2FsdHNhbHRzYWx0$aGFzaGhhc2hoYXNoaGFzaA',
   role: UserRole.admin,
   isActive: true,
   lastLogin: null,
@@ -2224,7 +2224,7 @@ describe('validateUser — bcrypt migration', () => {
     const legacy = { ...mockUser, password: '$2b$12$legacyhashvalue' };
     mockUsersService.findByEmail.mockResolvedValue(legacy);
     mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: true });
-    mockHashingService.hash.mockResolvedValue('$argon2id$v=19$m=65536,t=3,p=1$new$hash');
+    mockHashingService.hash.mockResolvedValue('$argon2id$v=19$m=65536,p=1,t=3$new$hash');
     mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
 
     const result = await service.validateUser('admin@test.com', 'Admin@123456');
@@ -2232,7 +2232,7 @@ describe('validateUser — bcrypt migration', () => {
     expect(result).toEqual(legacy);
     expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({
       where: { id: legacy.id, password: '$2b$12$legacyhashvalue' },
-      data: { password: '$argon2id$v=19$m=65536,t=3,p=1$new$hash' },
+      data: { password: '$argon2id$v=19$m=65536,p=1,t=3$new$hash' },
     });
   });
 

@@ -216,7 +216,7 @@ createHmac('sha256', pepper)
 ```
 
 O salt é gerado pela própria lib `argon2`, é aleatório e distinto por senha, e permanece embutido na
-string PHC (`$argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>`). **Não existe coluna de salt.**
+string PHC (`$argon2id$v=19$m=65536,p=1,t=3$<salt>$<hash>`). **Não existe coluna de salt.**
 
 ### API do serviço
 
