@@ -144,5 +144,17 @@ describe('HashingService', () => {
       const unpeppered = module.get(HashingService);
       await expect(unpeppered.hash('uma senha bem comprida')).rejects.toThrow(/PASSWORD_PEPPER/);
     });
+
+    it('propagates rather than swallows a verify() failure when the pepper is absent', async () => {
+      const hash = await service.hash('uma senha bem comprida');
+      const module = await moduleWith(undefined);
+      const unpeppered = module.get(HashingService);
+      // A missing pepper is an operational failure, not a wrong password —
+      // it must surface to the caller (as a 500), never come back as a
+      // quiet { valid: false }.
+      await expect(unpeppered.verify(hash, 'uma senha bem comprida')).rejects.toThrow(
+        /PASSWORD_PEPPER/,
+      );
+    });
   });
 });

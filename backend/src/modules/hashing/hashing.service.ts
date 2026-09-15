@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import * as bcrypt from 'bcrypt';
@@ -26,6 +26,7 @@ export const ARGON2_PARAMS = {
 const PEPPER_LABEL = 'inventory-manager:password:v1';
 
 const BCRYPT_PREFIXES = ['$2a$', '$2b$', '$2y$'];
+const ARGON2_PREFIX = '$argon2';
 
 export interface VerifyResult {
   valid: boolean;
@@ -35,6 +36,8 @@ export interface VerifyResult {
 
 @Injectable()
 export class HashingService implements OnModuleInit {
+  private readonly logger = new Logger(HashingService.name);
+
   /**
    * Precomputed at startup so that authentication paths with no eligible
    * stored password can still pay the Argon2id cost. Never persisted, never
@@ -63,8 +66,20 @@ export class HashingService implements OnModuleInit {
       return { valid: false, needsRehash: false };
     }
 
+    const isBcrypt = this.isBcryptHash(storedHash);
+
+    // Validate the stored hash's *shape* before calling into either library.
+    // A hash we don't recognize at all is indistinguishable from a wrong
+    // password from the caller's point of view. Anything that escapes the
+    // library calls below is therefore NOT a parse problem — it is a real
+    // failure (allocation, missing native binding, missing pepper) and must
+    // propagate rather than be reported as an ordinary invalid credential.
+    if (!isBcrypt && !storedHash.startsWith(ARGON2_PREFIX)) {
+      return { valid: false, needsRehash: false };
+    }
+
     try {
-      if (this.isBcryptHash(storedHash)) {
+      if (isBcrypt) {
         // Legacy hashes were produced from the RAW password, not the HMAC
         // material — they must be compared the same way they were created.
         const valid = await bcrypt.compare(password, storedHash);
@@ -73,9 +88,9 @@ export class HashingService implements OnModuleInit {
 
       const valid = await argon2.verify(storedHash, this.deriveMaterial(password));
       return { valid, needsRehash: false };
-    } catch {
-      // Malformed or unrecognized hash — indistinguishable from a wrong password.
-      return { valid: false, needsRehash: false };
+    } catch (error) {
+      this.logFailure(error);
+      throw error;
     }
   }
 
@@ -93,9 +108,16 @@ export class HashingService implements OnModuleInit {
       await this.onModuleInit();
     }
     try {
+      // A mismatch against the dummy hash resolves to `false` without
+      // throwing — that is the expected, silent path this method exists
+      // for. Anything that DOES throw here (a derivation failure from a
+      // missing pepper, an allocation error, ...) is a real failure and
+      // must not be swallowed, or it would silently collapse the timing
+      // equalization this method provides.
       await argon2.verify(this.dummyHash as string, this.deriveMaterial(password));
-    } catch {
-      // expected and ignored
+    } catch (error) {
+      this.logFailure(error);
+      throw error;
     }
     return false;
   }
@@ -113,5 +135,16 @@ export class HashingService implements OnModuleInit {
       .update(PEPPER_LABEL)
       .update(password, 'utf8')
       .digest();
+  }
+
+  /**
+   * Logs an unexpected verification failure without ever including the
+   * stored hash, the password, the pepper, or which hash family (bcrypt vs
+   * Argon2id) was involved.
+   */
+  private logFailure(error: unknown): void {
+    this.logger.error(
+      `Password verification failed unexpectedly: ${error instanceof Error ? error.message : 'unknown error'}`,
+    );
   }
 }
