@@ -61,6 +61,22 @@ export class HashingService implements OnModuleInit {
     return argon2.hash(this.deriveMaterial(password), ARGON2_PARAMS);
   }
 
+  /**
+   * Re-encodes an ALREADY-ACCEPTED password under Argon2id, bypassing the
+   * password policy.
+   *
+   * This exists solely for the progressive bcrypt -> Argon2id migration, where
+   * the user has just authenticated successfully with a password that predates
+   * the current policy. Applying the policy here would reject their correct
+   * credentials and lock them out of the system.
+   *
+   * NEVER call this from a flow where a user CHOOSES a password — activation,
+   * reset, or change. Those must use hash(), which enforces the policy.
+   */
+  async rehashLegacy(password: string): Promise<string> {
+    return argon2.hash(this.deriveMaterial(password), ARGON2_PARAMS);
+  }
+
   async verify(storedHash: string, password: string): Promise<VerifyResult> {
     if (typeof storedHash !== 'string' || storedHash.length === 0) {
       return { valid: false, needsRehash: false };

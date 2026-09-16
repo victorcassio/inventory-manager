@@ -54,6 +54,35 @@ describe('HashingService', () => {
     });
   });
 
+  describe('rehashLegacy', () => {
+    it('produces an argon2id PHC string', async () => {
+      const hash = await service.rehashLegacy('uma senha bem comprida');
+      expect(hash.startsWith('$argon2id$')).toBe(true);
+      expect(hash).toContain('m=65536,p=1,t=3');
+    });
+
+    it('succeeds for a password that hash() rejects for policy violations', async () => {
+      await expect(service.hash('Admin@123456')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.rehashLegacy('Admin@123456')).resolves.toMatch(/^\$argon2id\$/);
+    });
+
+    it('produces a hash that verify() accepts', async () => {
+      const hash = await service.rehashLegacy('Admin@123456');
+      await expect(service.verify(hash, 'Admin@123456')).resolves.toEqual({
+        valid: true,
+        needsRehash: false,
+      });
+    });
+
+    it('propagates rather than swallows a failure when the pepper is absent', async () => {
+      const module = await moduleWith(undefined);
+      const unpeppered = module.get(HashingService);
+      await expect(unpeppered.rehashLegacy('uma senha bem comprida')).rejects.toThrow(
+        /PASSWORD_PEPPER/,
+      );
+    });
+  });
+
   describe('verify', () => {
     it('accepts the correct password', async () => {
       const hash = await service.hash('uma senha bem comprida');

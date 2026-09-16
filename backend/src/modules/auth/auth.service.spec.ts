@@ -30,6 +30,7 @@ const mockUsersService = {
 
 const mockHashingService = {
   hash: jest.fn(),
+  rehashLegacy: jest.fn(),
   verify: jest.fn(),
   isBcryptHash: jest.fn(),
   verifyDummy: jest.fn().mockResolvedValue(false),
@@ -164,7 +165,7 @@ describe('AuthService', () => {
       const legacy = { ...mockUser, password: '$2b$12$legacyhashvalue' };
       mockUsersService.findByEmail.mockResolvedValue(legacy);
       mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: true });
-      mockHashingService.hash.mockResolvedValue('$argon2id$v=19$m=65536,p=1,t=3$new$hash');
+      mockHashingService.rehashLegacy.mockResolvedValue('$argon2id$v=19$m=65536,p=1,t=3$new$hash');
       mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.validateUser('admin@test.com', 'Admin@123456');
@@ -179,7 +180,7 @@ describe('AuthService', () => {
     it('does not touch passwordChangedAt on a transparent rehash', async () => {
       mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, password: '$2a$12$legacy' });
       mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: true });
-      mockHashingService.hash.mockResolvedValue('$argon2id$new');
+      mockHashingService.rehashLegacy.mockResolvedValue('$argon2id$new');
       mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
 
       await service.validateUser('admin@test.com', 'Admin@123456');
@@ -194,7 +195,7 @@ describe('AuthService', () => {
 
       await service.validateUser('admin@test.com', 'uma senha bem comprida');
 
-      expect(mockHashingService.hash).not.toHaveBeenCalled();
+      expect(mockHashingService.rehashLegacy).not.toHaveBeenCalled();
       expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
     });
 
@@ -212,7 +213,7 @@ describe('AuthService', () => {
 
       mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, password: '$2b$12$legacy' });
       mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: true });
-      mockHashingService.hash.mockResolvedValue('$argon2id$new');
+      mockHashingService.rehashLegacy.mockResolvedValue('$argon2id$new');
       mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
 
       await service.validateUser('admin@test.com', 'Admin@123456');
@@ -221,6 +222,21 @@ describe('AuthService', () => {
       expect(warnSpy).not.toHaveBeenCalled();
       logSpy.mockRestore();
       warnSpy.mockRestore();
+    });
+
+    it('succeeds for a legacy login whose password violates the current policy', async () => {
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, password: '$2b$12$legacy' });
+      mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: true });
+      mockHashingService.rehashLegacy.mockResolvedValue('$argon2id$rehashed-policy-noncompliant');
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+
+      // 'Admin@123456' is policy-noncompliant (common password) but was the
+      // user's real, previously-accepted credential.
+      const result = await service.validateUser('admin@test.com', 'Admin@123456');
+
+      expect(result).not.toBeNull();
+      expect(mockHashingService.hash).not.toHaveBeenCalled();
+      expect(mockHashingService.rehashLegacy).toHaveBeenCalledWith('Admin@123456');
     });
   });
 

@@ -46,15 +46,18 @@ export class AuthService {
     }
 
     const { valid, needsRehash } = await this.hashing.verify(user.password, password);
-    if (!valid) return null;
+    if (valid !== true) return null;
 
     if (needsRehash) {
       // Conditional on the old hash so a concurrent reset/change wins instead of
       // being overwritten. passwordChangedAt is deliberately untouched: a
-      // transparent rehash is not a user-initiated change.
+      // transparent rehash is not a user-initiated change. rehashLegacy() is
+      // used deliberately instead of hash(): this password already predates
+      // the current policy and was just accepted as correct, so it must not
+      // be re-validated against the policy — that would lock the user out.
       await this.prisma.user.updateMany({
         where: { id: user.id, password: user.password },
-        data: { password: await this.hashing.hash(password) },
+        data: { password: await this.hashing.rehashLegacy(password) },
       });
     }
 
