@@ -8,8 +8,17 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
-// Paths that may carry credentials — never log their request body or detailed context
-const SENSITIVE_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout'];
+// Paths that may carry credentials or single-use tokens — never log their
+// request body or detailed context. Responses are unaffected.
+const SENSITIVE_PATHS = [
+  '/auth/login',
+  '/auth/refresh',
+  '/auth/logout',
+  '/auth/activate-account',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/change-password',
+];
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
