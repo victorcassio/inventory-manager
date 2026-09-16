@@ -19,6 +19,11 @@ const NEW_PASSWORD = 'Outra senha e2e bem comprida';
 
 const ALL_EMAILS = [ADMIN_EMAIL, ATTENDANT_EMAIL, INVITED_EMAIL, LEGACY_EMAIL];
 
+// The single message every token defect must produce. Expired, already-used and
+// revoked have to be indistinguishable from outside: any divergence is an
+// enumeration oracle, so each of the three asserts this exact string.
+const INVALID_TOKEN_MESSAGE = 'Link inválido ou expirado';
+
 // A UUID has hyphens at fixed positions; an IPv4/IPv6 address never does in
 // that pattern. Good enough to distinguish "looks like a uuid" from "looks
 // like an address" without pulling in a uuid-validation dependency.
@@ -36,16 +41,37 @@ describe('Users and passwords (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let mail: FakeMailService;
+  let seedHash: string;
   // The ThrottlerGuard's in-memory storage is a singleton shared by every
   // request this process handles. Left alone, the sheer number of logins and
   // forgot-password calls this suite makes across its own tests trips the
   // production rate limits (10 logins/60s, 5 forgot-password/15min) well
   // before the tests that actually exercise business logic get to run,
-  // producing 429s that masquerade as unrelated failures. Clearing it before
+  // producing 429s that masquerade as unrelated failures. Resetting it before
   // each test isolates tests from each other's call volume without touching
-  // any guard, controller or rate-limit value — the limits themselves are
-  // exercised, just not exhausted by cross-test crosstalk.
-  let throttlerStorage: { storage: Map<string, unknown> };
+  // any guard, controller or rate-limit value; the limits themselves are
+  // asserted by the 'rate limiting' block below, which starts from a window
+  // this reset guarantees is empty.
+  let throttlerStorage: {
+    storage: Map<string, unknown>;
+    timeoutIds?: Map<string, NodeJS.Timeout[]>;
+  };
+
+  // Clearing the storage map is not enough on its own. Every hit also schedules
+  // a timer that decrements that key's counter when its window lapses, and the
+  // callback destructures `storage.get(key)` with no guard
+  // (@nestjs/throttler 6.5.0, throttler.service.js:27-32). With the key already
+  // gone, a timer firing between tests throws a TypeError from outside any
+  // test — an uncaught exception that takes down the Jest worker instead of
+  // failing a test, up to 60s after the login that scheduled it. The library
+  // only drains timeoutIds on application shutdown, so the suite cancels them
+  // itself. A stale timer would also decrement a counter belonging to a
+  // re-created key, quietly falsifying the very limits the block below asserts.
+  function resetThrottler() {
+    throttlerStorage.timeoutIds?.forEach(ids => ids.forEach(clearTimeout));
+    throttlerStorage.timeoutIds?.clear();
+    throttlerStorage.storage.clear();
+  }
 
   const api = () => request(app.getHttpServer());
 
@@ -87,6 +113,10 @@ describe('Users and passwords (e2e)', () => {
 
   async function login(email: string, password: string) {
     const res = await api().post('/api/v1/auth/login').send({ email, password });
+    // Without this, an unexpected 401 or 429 returns undefined tokens and the
+    // failure surfaces one or two requests later as a baffling 401/403 rather
+    // than at its cause.
+    expect(res.status).toBe(200);
     return res.body as { accessToken: string; refreshToken: string };
   }
 
@@ -116,28 +146,55 @@ describe('Users and passwords (e2e)', () => {
     prisma = module.get(PrismaService);
     mail = module.get(FakeMailService);
     throttlerStorage = module.get(ThrottlerStorage);
+
+    // Argon2id at 64 MiB / t=3 is deliberately expensive; the input is constant,
+    // so hash it once instead of once per test.
+    seedHash = await hashSeedPassword(PASSWORD);
+
+    // The map of pending expiry timers is the whole reason resetThrottler()
+    // exists. If a future version of the library renames or encapsulates it,
+    // the optional chaining below would silently degrade the reset back to a
+    // bare storage.clear() and bring back the uncaught TypeError it prevents.
+    // Fail loudly here instead.
+    expect(throttlerStorage.timeoutIds).toBeInstanceOf(Map);
+
+    // A previous run killed mid-suite (Ctrl-C, worker crash) leaves fixture rows
+    // behind, and the first invitation test would then fail with a 409 that has
+    // nothing to do with the code under test. The invited and legacy users are
+    // the ones that collide; admin and attendant need no pre-delete because
+    // beforeEach upserts them back into a known state. The user delete comes
+    // after cleanupFixtures() because AuditLog.userId is a required,
+    // non-cascading FK that would otherwise block it.
+    await cleanupFixtures();
+    await prisma.user.deleteMany({ where: { email: { in: [INVITED_EMAIL, LEGACY_EMAIL] } } });
   });
 
   beforeEach(async () => {
     mail.reset();
-    throttlerStorage.storage.clear();
-    const hashed = await hashSeedPassword(PASSWORD);
-    await seedUser(ADMIN_EMAIL, 'admin', hashed);
-    await seedUser(ATTENDANT_EMAIL, 'attendant', hashed);
+    resetThrottler();
+    await seedUser(ADMIN_EMAIL, 'admin', seedHash);
+    await seedUser(ATTENDANT_EMAIL, 'attendant', seedHash);
   });
 
-  afterEach(async () => {
+  // Every predicate here is scoped to this suite's own fixture e-mails. The
+  // suite shares inventory_db with the developer's demo data, so no unscoped
+  // deleteMany is allowed. Order matters: AuditLog.userId is a required
+  // relation with no cascade, so its rows must go before the users they point at.
+  async function cleanupFixtures() {
     await prisma.userActionToken.deleteMany({ where: { user: { email: { in: ALL_EMAILS } } } });
     await prisma.refreshToken.deleteMany({ where: { user: { email: { in: ALL_EMAILS } } } });
     await prisma.auditLog.deleteMany({ where: { user: { email: { in: ALL_EMAILS } } } });
+  }
+
+  afterEach(async () => {
+    await cleanupFixtures();
     await prisma.user.deleteMany({ where: { email: { in: [INVITED_EMAIL, LEGACY_EMAIL] } } });
   });
 
   afterAll(async () => {
-    await prisma.userActionToken.deleteMany({ where: { user: { email: { in: ALL_EMAILS } } } });
-    await prisma.refreshToken.deleteMany({ where: { user: { email: { in: ALL_EMAILS } } } });
-    await prisma.auditLog.deleteMany({ where: { user: { email: { in: ALL_EMAILS } } } });
+    await cleanupFixtures();
     await prisma.user.deleteMany({ where: { email: { in: ALL_EMAILS } } });
+    resetThrottler();
     await app.close();
   });
 
@@ -205,7 +262,7 @@ describe('Users and passwords (e2e)', () => {
 
       const second = await api().post('/api/v1/auth/activate-account').send(body);
       expect(second.status).toBe(400);
-      expect(JSON.stringify(second.body)).toContain('Link inválido ou expirado');
+      expect(JSON.stringify(second.body)).toContain(INVALID_TOKEN_MESSAGE);
     });
 
     it('rejects an expired token', async () => {
@@ -225,6 +282,8 @@ describe('Users and passwords (e2e)', () => {
         .post('/api/v1/auth/activate-account')
         .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
       expect(res.status).toBe(400);
+      // Must be the same message a reused token produces — see the constant.
+      expect(JSON.stringify(res.body)).toContain(INVALID_TOKEN_MESSAGE);
     });
 
     it('rejects a revoked token and resend invalidates the previous one', async () => {
@@ -244,11 +303,13 @@ describe('Users and passwords (e2e)', () => {
       const secondToken = lastTokenFrom(mail);
       expect(secondToken).not.toBe(firstToken);
 
-      // The first token is now revoked.
-      await api()
+      // The first token is now revoked, and says so in exactly the same words
+      // an expired or already-used token does.
+      const revoked = await api()
         .post('/api/v1/auth/activate-account')
-        .send({ token: firstToken, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD })
-        .expect(400);
+        .send({ token: firstToken, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+      expect(revoked.status).toBe(400);
+      expect(JSON.stringify(revoked.body)).toContain(INVALID_TOKEN_MESSAGE);
 
       // The second one works.
       await api()
@@ -343,11 +404,12 @@ describe('Users and passwords (e2e)', () => {
       expect(log.userId).toBe(admin!.id);
       expect(log.userId).not.toBe(created.body.user.id);
 
-      // ipAddress, when present, must look like an address, never a uuid —
-      // this is what catches an ipAddress/actorId argument swap.
-      if (log.ipAddress) {
-        expect(UUID_SHAPE.test(log.ipAddress)).toBe(false);
-      }
+      // ipAddress must be recorded and must look like an address, never a uuid —
+      // this is what catches an ipAddress/actorId argument swap. Asserted
+      // unconditionally: a null here is itself one of the failures the swap
+      // produces, so guarding on truthiness would pass vacuously.
+      expect(log.ipAddress).toBeTruthy();
+      expect(UUID_SHAPE.test(log.ipAddress!)).toBe(false);
     });
   });
 
@@ -379,11 +441,16 @@ describe('Users and passwords (e2e)', () => {
       const { accessToken } = await login(ADMIN_EMAIL, PASSWORD);
       const me = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
 
-      await api()
+      const res = await api()
         .patch(`/api/v1/users/${me!.id}/status`)
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ isActive: false })
-        .expect(403);
+        .send({ isActive: false });
+
+      // The target is an admin, so the admin-target rule alone would produce a
+      // 403 even with the self-guard deleted. Asserting the message is what
+      // makes this test about the rule it names.
+      expect(res.status).toBe(403);
+      expect(JSON.stringify(res.body)).toContain('sua própria conta');
     });
   });
 
@@ -451,10 +518,18 @@ describe('Users and passwords (e2e)', () => {
         .send({ email: ATTENDANT_EMAIL, password: PASSWORD })
         .expect(401);
 
-      // Sessions revoked.
+      // Sessions revoked — both halves. The refresh token is revoked in the
+      // database; the access token is stateless, so the only thing that can
+      // invalidate the one already issued is the passwordChangedAt gate in
+      // JwtStrategy. That is a different branch from the isActive gate the
+      // deactivation test covers, and it needs its own assertion.
       await api()
         .post('/api/v1/auth/refresh')
         .send({ refreshToken: session.refreshToken })
+        .expect(401);
+      await api()
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${session.accessToken}`)
         .expect(401);
 
       // Token is single-use.
@@ -495,13 +570,17 @@ describe('Users and passwords (e2e)', () => {
       await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
       const token = lastTokenFrom(mail);
 
+      // Deliberately a nonsense string: a real Portuguese word like 'curta'
+      // could legitimately appear in a future validation message ('senha muito
+      // curta') and fail this assertion for the wrong reason. The only way
+      // 'xK7q' reaches the body is the server echoing the submitted password.
       const res = await api()
         .post('/api/v1/auth/reset-password')
-        .send({ token, password: 'curta', passwordConfirmation: 'curta' });
+        .send({ token, password: 'xK7q', passwordConfirmation: 'xK7q' });
 
       expect(res.status).toBe(400);
       expect(JSON.stringify(res.body)).toContain('12 caracteres');
-      expect(JSON.stringify(res.body)).not.toContain('curta');
+      expect(JSON.stringify(res.body)).not.toContain('xK7q');
     });
   });
 
@@ -522,6 +601,12 @@ describe('Users and passwords (e2e)', () => {
       await api()
         .post('/api/v1/auth/refresh')
         .send({ refreshToken: session.refreshToken })
+        .expect(401);
+      // "Every session" includes the stateless one: the access token issued
+      // before the change must stop working too.
+      await api()
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${session.accessToken}`)
         .expect(401);
       await api()
         .post('/api/v1/auth/login')
@@ -596,6 +681,24 @@ describe('Users and passwords (e2e)', () => {
 
       const after = await prisma.user.findUnique({ where: { email: LEGACY_EMAIL } });
       expect(after!.password!.startsWith('$2')).toBe(true);
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('returns 429 once the login window limit is exceeded', async () => {
+      // auth.controller.ts caps the login route at 10 hits per 60s window, and
+      // beforeEach guarantees this window starts empty. Wrong-password attempts
+      // are used so nothing but the limit itself decides the outcome.
+      const statuses: number[] = [];
+      for (let i = 0; i < 11; i++) {
+        const res = await api()
+          .post('/api/v1/auth/login')
+          .send({ email: ADMIN_EMAIL, password: 'senha errada bem comprida' });
+        statuses.push(res.status);
+      }
+
+      expect(statuses.slice(0, 10)).toEqual(Array(10).fill(401));
+      expect(statuses[10]).toBe(429);
     });
   });
 
