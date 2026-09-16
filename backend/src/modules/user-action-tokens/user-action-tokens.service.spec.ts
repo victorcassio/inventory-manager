@@ -7,6 +7,7 @@ import {
   hashActionToken,
   ACTION_TOKEN_TTL,
 } from './user-action-tokens.service';
+import { deriveInvitationStatus } from '../users/invitations.service';
 
 const mockPrisma = {
   userActionToken: {
@@ -189,10 +190,78 @@ describe('UserActionTokensService', () => {
       expect(map.get('user-2')?.id).toBe('t3');
     });
 
+    it('queries ordered newest-first and never selects tokenHash', async () => {
+      mockPrisma.userActionToken.findMany.mockResolvedValue([]);
+      await service.findLatest(['user-1'], UserActionTokenType.invitation);
+
+      const call = mockPrisma.userActionToken.findMany.mock.calls[0][0];
+      expect(call.orderBy).toEqual({ createdAt: 'desc' });
+      expect(call.select).toEqual({
+        id: true,
+        userId: true,
+        type: true,
+        expiresAt: true,
+        usedAt: true,
+        revokedAt: true,
+        createdAt: true,
+      });
+      expect(call.select).not.toHaveProperty('tokenHash');
+    });
+
+    it('still selects the newest token per user even if the mock returns ascending order', async () => {
+      // A pre-sorted-descending mock (as in the first test above) would pass
+      // identically even if the implementation asked Prisma for `asc` order.
+      // Feeding ascending data here proves the newest-per-user selection does
+      // not silently depend on the caller/DB having pre-sorted the rows.
+      mockPrisma.userActionToken.findMany.mockResolvedValue([
+        { id: 't1', userId: 'user-1', createdAt: new Date('2026-09-01') },
+        { id: 't2', userId: 'user-1', createdAt: new Date('2026-09-10') },
+        { id: 't3', userId: 'user-2', createdAt: new Date('2026-09-05') },
+      ]);
+
+      const map = await service.findLatest(['user-1', 'user-2'], UserActionTokenType.invitation);
+
+      expect(map.get('user-1')?.id).toBe('t2');
+      expect(map.get('user-2')?.id).toBe('t3');
+    });
+
     it('returns an empty map for no users without querying', async () => {
       const map = await service.findLatest([], UserActionTokenType.invitation);
       expect(map.size).toBe(0);
       expect(mockPrisma.userActionToken.findMany).not.toHaveBeenCalled();
+    });
+
+    it('resend-after-revoke: an older revoked token never masks a newer live one', async () => {
+      // The realistic shape an admin hits every time they resend an
+      // invitation: the old token is revoked, a fresh one is issued after it.
+      mockPrisma.userActionToken.findMany.mockResolvedValue([
+        {
+          id: 'old',
+          userId: 'user-1',
+          type: UserActionTokenType.invitation,
+          expiresAt: new Date('2026-09-02'),
+          usedAt: null,
+          revokedAt: new Date('2026-09-02T00:05:00Z'),
+          createdAt: new Date('2026-09-01'),
+        },
+        {
+          id: 'new',
+          userId: 'user-1',
+          type: UserActionTokenType.invitation,
+          expiresAt: new Date('2099-01-01'),
+          usedAt: null,
+          revokedAt: null,
+          createdAt: new Date('2026-09-02'),
+        },
+      ]);
+
+      const map = await service.findLatest(['user-1'], UserActionTokenType.invitation);
+      const latest = map.get('user-1');
+
+      expect(latest?.id).toBe('new');
+      expect(
+        deriveInvitationStatus({ passwordSetAt: null }, latest, new Date('2026-09-03')),
+      ).toBe('pending');
     });
   });
 });

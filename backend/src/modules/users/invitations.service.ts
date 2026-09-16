@@ -16,13 +16,16 @@ import { ActivateAccountDto } from '../auth/dto/activate-account.dto';
 
 export type InvitationStatus = 'none' | 'pending' | 'expired' | 'revoked' | 'accepted';
 
+/** The only fields `deriveInvitationStatus` reads off a token. */
+export type InvitationStatusToken = Pick<UserActionToken, 'usedAt' | 'revokedAt' | 'expiresAt'>;
+
 /**
  * Deterministic precedence, first match wins. Derived rather than stored: a
  * persisted status has to be kept in sync with token expiry and eventually lies.
  */
 export function deriveInvitationStatus(
   user: { passwordSetAt: Date | null },
-  latest: UserActionToken | undefined,
+  latest: InvitationStatusToken | undefined,
   now: Date = new Date(),
 ): InvitationStatus {
   if (user.passwordSetAt) return 'accepted';

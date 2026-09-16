@@ -18,6 +18,16 @@ const TOKEN_BYTES = 32;
 /** The generic message used for every token defect — absent, expired, used, revoked, wrong purpose. */
 export const INVALID_TOKEN_MESSAGE = 'Link inválido ou expirado';
 
+/**
+ * The projection `findLatest` returns — deliberately WITHOUT `tokenHash`. A
+ * digest must never leave this service; callers only ever need enough to
+ * derive a status and an expiry.
+ */
+export type LatestActionToken = Pick<
+  UserActionToken,
+  'id' | 'userId' | 'type' | 'expiresAt' | 'usedAt' | 'revokedAt' | 'createdAt'
+>;
+
 export function hashActionToken(rawToken: string): string {
   return createHash('sha256').update(rawToken).digest('hex');
 }
@@ -115,17 +125,32 @@ export class UserActionTokensService {
   async findLatest(
     userIds: string[],
     type: UserActionTokenType,
-  ): Promise<Map<string, UserActionToken>> {
-    const latest = new Map<string, UserActionToken>();
+  ): Promise<Map<string, LatestActionToken>> {
+    const latest = new Map<string, LatestActionToken>();
     if (userIds.length === 0) return latest;
 
     const tokens = await this.prisma.userActionToken.findMany({
       where: { userId: { in: userIds }, type },
       orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        userId: true,
+        type: true,
+        expiresAt: true,
+        usedAt: true,
+        revokedAt: true,
+        createdAt: true,
+      },
     });
 
+    // Belt-and-suspenders: pick the max createdAt per user explicitly rather
+    // than trusting that the first row per user in the result is the newest.
+    // Correctness then does not silently hinge on the `orderBy` above.
     for (const token of tokens) {
-      if (!latest.has(token.userId)) latest.set(token.userId, token);
+      const current = latest.get(token.userId);
+      if (!current || token.createdAt > current.createdAt) {
+        latest.set(token.userId, token);
+      }
     }
 
     return latest;
