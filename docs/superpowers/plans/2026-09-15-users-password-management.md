@@ -32,6 +32,8 @@
 - **`PASSWORD_PEPPER` validation:** presence and ≥32 characters enforced in **every** environment (consistent with how `app.config.ts:16-22` already treats the JWT secrets); the placeholder-pattern check runs in production only. This is one notch stricter than the spec's wording and is intentional.
 - **Do not edit existing migrations.** One new migration directory only.
 - **Existing tests must keep passing:** backend 215 tests / 11 suites, frontend 193 tests / 27 suites.
+  (Contagens de partida do plano. Após a Task 13: backend 437 unit / 36 e2e. Após a Task 14:
+  frontend 217 testes / 30 suítes.)
 
 ## Deviations From the Spec
 
@@ -5906,7 +5908,9 @@ describe('passwordFieldSchema', () => {
   })
 
   it('rejects blocklisted passwords', () => {
-    for (const weak of ['123456789012', 'password123', 'Admin@123456']) {
+    // Cada entrada precisa ter no mínimo 12 caracteres, senão falha em min()
+    // e a asserção não prova nada sobre a blocklist.
+    for (const weak of ['123456789012', 'inventory123', 'Admin@123456']) {
       expect(passwordFieldSchema.safeParse(weak).success).toBe(false)
     }
   })
@@ -5956,6 +5960,9 @@ describe('changePasswordSchema', () => {
       newPasswordConfirmation: 'uma senha bem comprida',
     })
     expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0].path).toEqual(['newPassword'])
+    }
   })
 })
 ```
@@ -6021,7 +6028,7 @@ export const passwordFieldSchema = z
   })
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().email('E-mail inválido'),
+  email: z.string().trim().toLowerCase().email('E-mail inválido'),
 })
 
 const withConfirmation = z
@@ -6039,7 +6046,10 @@ export const resetPasswordSchema = withConfirmation
 
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, 'Informe sua senha atual'),
+    currentPassword: z
+      .string()
+      .min(1, 'Informe sua senha atual')
+      .max(200, 'Senha atual excede o limite'),
     newPassword: passwordFieldSchema,
     newPasswordConfirmation: z.string(),
   })
@@ -6066,7 +6076,12 @@ export const INVITABLE_ROLES = ['attendant', 'financial'] as const
 
 export const createUserSchema = z.object({
   name: z.string().trim().min(1, 'Nome obrigatório').max(100, 'Máximo de 100 caracteres'),
-  email: z.string().trim().toLowerCase().email('E-mail inválido').max(150),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email('E-mail inválido')
+    .max(150, 'Máximo de 150 caracteres'),
   role: z.enum(INVITABLE_ROLES, { errorMap: () => ({ message: 'Selecione um perfil' }) }),
 })
 
@@ -6097,13 +6112,13 @@ export interface AdminUser {
   email: string
   role: UserRole
   isActive: boolean
-  emailVerifiedAt?: string | null
-  passwordSetAt?: string | null
-  lastLogin?: string | null
+  emailVerifiedAt: string | null
+  passwordSetAt: string | null
+  lastLogin: string | null
   createdAt: string
   updatedAt: string
   invitationStatus: InvitationStatus
-  invitationExpiresAt?: string | null
+  invitationExpiresAt: string | null
 }
 
 export interface CreateUserResult {
@@ -6115,9 +6130,15 @@ export interface CreateUserResult {
 Also extend the existing `User` interface with the two read-only timestamps the login response now returns:
 
 ```ts
-  emailVerifiedAt?: string | null
-  passwordSetAt?: string | null
+  emailVerifiedAt: string | null
+  passwordSetAt: string | null
 ```
+
+Não use `?` em nenhum dos dois blocos acima: `toUserResponse` sempre emite as
+quatro chaves (`invitationExpiresAt` vem `null`, nunca ausente, quando não há
+convite pendente) e o select de `/auth/login` e `/auth/me` sempre traz as duas.
+Um `?` aqui obrigaria todo consumidor das Tasks 16-19 a distinguir um
+`undefined` que a API não produz.
 
 - [ ] **Step 5: Add the API clients**
 
@@ -6147,7 +6168,8 @@ export const usersApi = {
     api.patch<AdminUser>(`/users/${id}/status`, { isActive }).then((r) => r.data),
   resendInvitation: (id: string) =>
     api.post<CreateUserResult>(`/users/${id}/resend-invitation`).then((r) => r.data),
-  revokeInvitation: (id: string) => api.post(`/users/${id}/revoke-invitation`),
+  revokeInvitation: (id: string) =>
+    api.post<void>(`/users/${id}/revoke-invitation`).then(() => undefined),
 }
 ```
 
@@ -6155,21 +6177,27 @@ Append to `frontend/src/lib/api/auth.api.ts` inside the `authApi` object:
 
 ```ts
   activateAccount: (token: string, password: string, passwordConfirmation: string) =>
-    api.post('/auth/activate-account', { token, password, passwordConfirmation }),
+    api
+      .post<void>('/auth/activate-account', { token, password, passwordConfirmation })
+      .then(() => undefined),
   forgotPassword: (email: string) =>
     api.post<{ message: string }>('/auth/forgot-password', { email }).then((r) => r.data),
   resetPassword: (token: string, password: string, passwordConfirmation: string) =>
-    api.post('/auth/reset-password', { token, password, passwordConfirmation }),
+    api
+      .post<void>('/auth/reset-password', { token, password, passwordConfirmation })
+      .then(() => undefined),
   changePassword: (
     currentPassword: string,
     newPassword: string,
     newPasswordConfirmation: string,
   ) =>
-    api.post('/auth/change-password', {
-      currentPassword,
-      newPassword,
-      newPasswordConfirmation,
-    }),
+    api
+      .post<void>('/auth/change-password', {
+        currentPassword,
+        newPassword,
+        newPasswordConfirmation,
+      })
+      .then(() => undefined),
 ```
 
 - [ ] **Step 6: Run the schema test and the full frontend suite**
@@ -6179,13 +6207,16 @@ npx vitest run src/tests/schemas/password.schema.test.ts
 npm run test && npm run lint
 ```
 
-Expected: the new suite passes; all 193 existing tests still pass; lint exits 0.
+Expected: as novas suítes passam; o restante da suíte continua passando; lint sai 0.
+(Referência após a Task 14: 29 arquivos / 214 testes.) Tornar os quatro timestamps de
+`AdminUser`/`User` obrigatórios quebra fixtures antigos que montavam um `User` sem eles —
+`src/tests/layout/RoleGuard.test.tsx` e `Sidebar.test.tsx`. Corrija os fixtures, não o tipo.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 cd /home/userterras/Documents/inventory-manager
-git add frontend/src/types frontend/src/lib/api frontend/src/schemas frontend/src/tests/schemas
+git add frontend/src
 git commit -m "$(cat <<'MSG'
 feat(frontend): add user and password types, API clients and Zod schemas
 
@@ -6239,6 +6270,9 @@ const USER = {
   role: 'attendant' as const,
   isActive: true,
   createdAt: '2026-01-01',
+  // Obrigatórios em User desde a Task 14; omiti-los quebra o tsc.
+  emailVerifiedAt: null,
+  passwordSetAt: null,
 }
 
 describe('refresh token race', () => {
@@ -6366,7 +6400,7 @@ npx vitest run src/tests/auth/refreshRace.test.tsx
 npm run test && npm run lint
 ```
 
-Expected: 4 new tests pass; the 193 existing tests still pass.
+Expected: 4 new tests pass; the existing suite still passes (217 tests after Task 14).
 
 - [ ] **Step 6: Commit**
 
@@ -8247,7 +8281,16 @@ function renderGuarded(initialRole: 'admin' | 'attendant' | null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   if (initialRole) {
     useAuthStore.getState().setAuth(
-      { id: 'me', name: 'Eu', email: 'eu@test.com', role: initialRole, isActive: true, createdAt: '2026-01-01' },
+      {
+        id: 'me',
+        name: 'Eu',
+        email: 'eu@test.com',
+        role: initialRole,
+        isActive: true,
+        createdAt: '2026-01-01',
+        emailVerifiedAt: null,
+        passwordSetAt: null,
+      },
       'at', 'rt',
     )
   } else {
@@ -8609,7 +8652,16 @@ describe('AccountSecurityPage', () => {
     vi.clearAllMocks()
     localStorage.clear()
     useAuthStore.getState().setAuth(
-      { id: 'u1', name: 'Maria', email: 'maria@test.com', role: 'attendant', isActive: true, createdAt: '2026-01-01' },
+      {
+        id: 'u1',
+        name: 'Maria',
+        email: 'maria@test.com',
+        role: 'attendant',
+        isActive: true,
+        createdAt: '2026-01-01',
+        emailVerifiedAt: null,
+        passwordSetAt: null,
+      },
       'at-1', 'rt-1',
     )
   })
@@ -9138,7 +9190,7 @@ Before reporting the work complete, all of the following must have been run with
 | `cd backend && npm run test` | All unit suites pass, including the 215 pre-existing tests |
 | `cd backend && npm run build` | `nest build` succeeds |
 | `cd backend && npm run test:e2e` | Both e2e suites pass against Postgres on 5440 |
-| `cd frontend && npm run test` | All suites pass, including the 193 pre-existing tests |
+| `cd frontend && npm run test` | All suites pass, including the pre-existing tests (217 after Task 14) |
 | `cd frontend && npm run lint` | Exit 0 |
 | `cd frontend && npm run build` | `tsc -b && vite build` succeeds |
 | `SELECT count(*) FROM users WHERE password IS NOT NULL AND email_verified_at IS NULL` | `0` |

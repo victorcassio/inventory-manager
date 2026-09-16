@@ -26,6 +26,8 @@ function makeUser(role: string): User {
     role: role as User['role'],
     isActive: true,
     createdAt: '2024-01-01',
+    emailVerifiedAt: '2024-01-01',
+    passwordSetAt: '2024-01-01',
   }
 }
 
