@@ -72,10 +72,14 @@ export class HashingService implements OnModuleInit {
         // material — they must be compared the same way they were created.
         const valid = await bcrypt.compare(password, storedHash);
         return { valid, needsRehash: valid };
-      } catch {
-        // A damaged/unparseable bcrypt hash is indistinguishable from a
-        // wrong password. bcrypt.compare never touches the pepper, so there
-        // is no configuration failure this catch could be hiding.
+      } catch (error) {
+        // bcrypt.compare() resolves `false` for an ordinary mismatch rather
+        // than throwing, so anything that DOES throw here is abnormal — a
+        // damaged/unparseable stored hash. bcrypt.compare never touches the
+        // pepper, so there is no configuration failure this catch could be
+        // hiding. The caller still gets the safe answer (invalid); log it
+        // so a *pattern* of these is visible to operations.
+        this.logFailure(error);
         return { valid: false, needsRehash: false };
       }
     }
@@ -91,26 +95,33 @@ export class HashingService implements OnModuleInit {
       try {
         const valid = await argon2.verify(storedHash, material);
         return { valid, needsRehash: false };
-      } catch {
-        // Only malformed/unsupported stored Argon2 hashes are treated as
-        // invalid here.
-        //
-        // This catch is intentionally broad rather than narrowed to a
-        // specific error type. Investigated against the installed
-        // argon2@0.45.1 + @phc/format@1.0.0: PHC-string parse failures
-        // (missing "$", too many/unrecognized fields, bad id) throw
-        // TypeError from @phc/format's deserialize() — always before any
-        // native call. But a *recognized-shape*, corrupt-bodied digest (for
-        // example a truncated or too-short encoded hash) can fail native
-        // validation with a plain Error ("Output is too short") from the
-        // same code path (Napi::Error via AsyncWorker::OnError) that a
-        // genuine operational failure — e.g. ARGON2_MEMORY_ALLOCATION_ERROR
-        // — would also use. Neither carries an error code or subclass that
-        // distinguishes "corrupt stored hash" from "the box ran out of
-        // memory computing this hash". So narrowing to TypeError alone
-        // would let a corrupt-but-well-formed hash escape as a propagated
-        // 500 instead of the invalid-credential result required here. See
-        // the Task 2 report's "Fix round 2" section for the investigation.
+      } catch (error) {
+        // argon2.verify() resolves `false` for an ordinary mismatch rather
+        // than throwing, so anything that DOES throw here is abnormal:
+        // either a malformed/corrupt stored hash or a genuine operational
+        // failure (allocation, native binding). This catch is intentionally
+        // broad rather than narrowed to a specific error type — investigated
+        // against the installed argon2@0.45.1 + @phc/format@1.0.0:
+        // PHC-string parse failures (missing "$", too many/unrecognized
+        // fields, bad id) throw TypeError from @phc/format's deserialize()
+        // — always before any native call. But a *recognized-shape*,
+        // corrupt-bodied digest (for example a truncated or too-short
+        // encoded hash) can fail native validation with a plain Error
+        // ("Output is too short") from the same code path (Napi::Error via
+        // AsyncWorker::OnError) that a genuine operational failure — e.g.
+        // ARGON2_MEMORY_ALLOCATION_ERROR — would also use. Neither carries
+        // an error code or subclass that distinguishes "corrupt stored
+        // hash" from "the box ran out of memory computing this hash". So
+        // narrowing to TypeError alone would let a corrupt-but-well-formed
+        // hash escape as a propagated 500 instead of the invalid-credential
+        // result required here. See the Task 2 report's "Fix round 2"
+        // section for the investigation. Since the two cases can't be told
+        // apart, the caller still gets the safe answer (invalid) — but the
+        // failure is logged, so a corrupt stored hash produces rare,
+        // harmless noise while a genuine operational failure produces an
+        // immediately diagnosable flood instead of a silent, unlogged 401
+        // storm (see "Fix round 3").
+        this.logFailure(error);
         return { valid: false, needsRehash: false };
       }
     }

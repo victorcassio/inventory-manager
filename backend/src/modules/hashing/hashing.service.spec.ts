@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as argon2 from 'argon2';
 import { HashingService } from './hashing.service';
 
 const TEST_PEPPER = 'test-only-pepper-with-at-least-32-chars';
@@ -114,6 +115,36 @@ describe('HashingService', () => {
       const legacy = await bcrypt.hash('short', 12);
       const result = await service.verify(legacy, 'short');
       expect(result.valid).toBe(true);
+    });
+
+    it('logs and returns invalid — without leaking the hash or password — when argon2.verify() fails operationally', async () => {
+      // argon2.verify() resolves `false` for an ordinary mismatch rather
+      // than throwing, so a genuine operational failure (allocation error,
+      // native binding trouble, ...) is indistinguishable from a corrupt
+      // stored hash from inside verify() — see the Argon2 branch's comment.
+      // The required behaviour is: the caller still gets the safe answer,
+      // but the failure must not be invisible to operations.
+      const hash = await service.hash('uma senha bem comprida');
+      const password = 'uma senha bem comprida';
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const verifySpy = jest
+        .spyOn(argon2, 'verify')
+        .mockRejectedValueOnce(new Error('ARGON2_MEMORY_ALLOCATION_ERROR'));
+
+      try {
+        await expect(service.verify(hash, password)).resolves.toEqual({
+          valid: false,
+          needsRehash: false,
+        });
+
+        expect(errorSpy).toHaveBeenCalled();
+        const loggedText = errorSpy.mock.calls.map(call => String(call[0])).join('\n');
+        expect(loggedText).not.toContain(password);
+        expect(loggedText).not.toContain(hash);
+      } finally {
+        verifySpy.mockRestore();
+        errorSpy.mockRestore();
+      }
     });
   });
 
