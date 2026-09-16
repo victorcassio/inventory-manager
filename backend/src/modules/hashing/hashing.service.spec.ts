@@ -64,8 +64,10 @@ describe('HashingService', () => {
 
     it('rejects an incorrect password', async () => {
       const hash = await service.hash('uma senha bem comprida');
-      const result = await service.verify(hash, 'outra senha bem comprida');
-      expect(result.valid).toBe(false);
+      await expect(service.verify(hash, 'outra senha bem comprida')).resolves.toEqual({
+        valid: false,
+        needsRehash: false,
+      });
     });
 
     it('verifies legacy bcrypt hashes against the raw password and flags a rehash', async () => {
@@ -90,6 +92,19 @@ describe('HashingService', () => {
 
     it('returns invalid instead of throwing on a malformed hash', async () => {
       await expect(service.verify('not-a-hash', 'uma senha bem comprida')).resolves.toEqual({
+        valid: false,
+        needsRehash: false,
+      });
+    });
+
+    it('returns invalid instead of throwing on a stored Argon2id hash with a valid prefix but a corrupt/truncated body', async () => {
+      // Valid $argon2id$ prefix and well-formed parameter segment, but a
+      // hash/salt body too short to pass the native library's own
+      // validation — this is what DB damage or truncation looks like on
+      // the wire. Must come back as an ordinary invalid credential, not an
+      // unhandled rejection.
+      const corrupt = '$argon2id$v=19$m=65536,p=1,t=3$AAAA$BBBB';
+      await expect(service.verify(corrupt, 'uma senha bem comprida')).resolves.toEqual({
         valid: false,
         needsRehash: false,
       });
@@ -130,6 +145,12 @@ describe('HashingService', () => {
       expect(dummy.startsWith('$argon2id$')).toBe(true);
       expect(dummy).toContain('m=65536,p=1,t=3');
     });
+
+    it('throws if called before onModuleInit() has run, rather than lazily initializing', async () => {
+      const module = await moduleWith(TEST_PEPPER);
+      const uninitialized = module.get(HashingService);
+      await expect(uninitialized.verifyDummy('qualquer coisa')).rejects.toThrow(/onModuleInit/);
+    });
   });
 
   describe('missing pepper', () => {
@@ -155,6 +176,35 @@ describe('HashingService', () => {
       await expect(unpeppered.verify(hash, 'uma senha bem comprida')).rejects.toThrow(
         /PASSWORD_PEPPER/,
       );
+    });
+
+    it('propagates rather than swallows a verifyDummy() failure when the pepper is absent', async () => {
+      const module = await moduleWith(undefined);
+      const unpeppered = module.get(HashingService);
+      // Simulate an already-initialized service (as it would be in a real
+      // app — onModuleInit() runs once at boot) whose pepper then went
+      // missing: dummyHash is present, but deriveMaterial() still has
+      // nothing to HMAC with.
+      (unpeppered as any).dummyHash = (service as any).dummyHash;
+      await expect(unpeppered.verifyDummy('qualquer coisa')).rejects.toThrow(/PASSWORD_PEPPER/);
+    });
+
+    it('never includes the password or the pepper in a thrown configuration error', async () => {
+      const password = 'uma senha usada apenas neste teste de vazamento';
+      const module = await moduleWith(undefined);
+      const unpeppered = module.get(HashingService);
+
+      let caught: unknown;
+      try {
+        await unpeppered.hash(password);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      const message = (caught as Error).message;
+      expect(message).not.toContain(password);
+      expect(message).not.toContain(TEST_PEPPER);
     });
   });
 });

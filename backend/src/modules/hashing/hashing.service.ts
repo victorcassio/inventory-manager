@@ -66,36 +66,65 @@ export class HashingService implements OnModuleInit {
       return { valid: false, needsRehash: false };
     }
 
-    const isBcrypt = this.isBcryptHash(storedHash);
-
-    // Validate the stored hash's *shape* before calling into either library.
-    // A hash we don't recognize at all is indistinguishable from a wrong
-    // password from the caller's point of view. Anything that escapes the
-    // library calls below is therefore NOT a parse problem — it is a real
-    // failure (allocation, missing native binding, missing pepper) and must
-    // propagate rather than be reported as an ordinary invalid credential.
-    if (!isBcrypt && !storedHash.startsWith(ARGON2_PREFIX)) {
-      return { valid: false, needsRehash: false };
-    }
-
-    try {
-      if (isBcrypt) {
+    if (this.isBcryptHash(storedHash)) {
+      try {
         // Legacy hashes were produced from the RAW password, not the HMAC
         // material — they must be compared the same way they were created.
         const valid = await bcrypt.compare(password, storedHash);
         return { valid, needsRehash: valid };
+      } catch {
+        // A damaged/unparseable bcrypt hash is indistinguishable from a
+        // wrong password. bcrypt.compare never touches the pepper, so there
+        // is no configuration failure this catch could be hiding.
+        return { valid: false, needsRehash: false };
       }
-
-      const valid = await argon2.verify(storedHash, this.deriveMaterial(password));
-      return { valid, needsRehash: false };
-    } catch (error) {
-      this.logFailure(error);
-      throw error;
     }
+
+    if (this.isArgon2Hash(storedHash)) {
+      // Configuration failures must propagate. deriveMaterial() is called
+      // OUTSIDE the try below, deliberately: that makes "a missing pepper
+      // throws" a structural property of this method, not something that
+      // depends on the catch below staying narrow. If someone later widens
+      // that catch, a missing pepper still cannot become `{valid: false}`.
+      const material = this.deriveMaterial(password);
+
+      try {
+        const valid = await argon2.verify(storedHash, material);
+        return { valid, needsRehash: false };
+      } catch {
+        // Only malformed/unsupported stored Argon2 hashes are treated as
+        // invalid here.
+        //
+        // This catch is intentionally broad rather than narrowed to a
+        // specific error type. Investigated against the installed
+        // argon2@0.45.1 + @phc/format@1.0.0: PHC-string parse failures
+        // (missing "$", too many/unrecognized fields, bad id) throw
+        // TypeError from @phc/format's deserialize() — always before any
+        // native call. But a *recognized-shape*, corrupt-bodied digest (for
+        // example a truncated or too-short encoded hash) can fail native
+        // validation with a plain Error ("Output is too short") from the
+        // same code path (Napi::Error via AsyncWorker::OnError) that a
+        // genuine operational failure — e.g. ARGON2_MEMORY_ALLOCATION_ERROR
+        // — would also use. Neither carries an error code or subclass that
+        // distinguishes "corrupt stored hash" from "the box ran out of
+        // memory computing this hash". So narrowing to TypeError alone
+        // would let a corrupt-but-well-formed hash escape as a propagated
+        // 500 instead of the invalid-credential result required here. See
+        // the Task 2 report's "Fix round 2" section for the investigation.
+        return { valid: false, needsRehash: false };
+      }
+    }
+
+    // Unrecognized hash shape — indistinguishable from a wrong password.
+    return { valid: false, needsRehash: false };
   }
 
   isBcryptHash(hash: string): boolean {
     return typeof hash === 'string' && BCRYPT_PREFIXES.some(p => hash.startsWith(p));
+  }
+
+  isArgon2Hash(hash: string): boolean {
+    return typeof hash === 'string' && hash.startsWith(ARGON2_PREFIX);
   }
 
   /**
@@ -105,16 +134,31 @@ export class HashingService implements OnModuleInit {
    */
   async verifyDummy(password: string): Promise<false> {
     if (!this.dummyHash) {
-      await this.onModuleInit();
+      // Nest calls onModuleInit() before any request-handling code can run,
+      // and the test suite drives it explicitly in beforeEach. There is no
+      // legitimate way to reach this method uninitialized — fail loudly
+      // instead of masking the bug with a lazy re-init.
+      throw new Error(
+        'HashingService.verifyDummy() called before onModuleInit() — no dummy hash available',
+      );
     }
+
+    // Configuration failures must propagate here too, for the same
+    // structural reason as in verify(): deriveMaterial() is called OUTSIDE
+    // the try below.
+    const material = this.deriveMaterial(password);
+
     try {
       // A mismatch against the dummy hash resolves to `false` without
       // throwing — that is the expected, silent path this method exists
-      // for. Anything that DOES throw here (a derivation failure from a
-      // missing pepper, an allocation error, ...) is a real failure and
-      // must not be swallowed, or it would silently collapse the timing
-      // equalization this method provides.
-      await argon2.verify(this.dummyHash as string, this.deriveMaterial(password));
+      // for. The dummy hash is generated once at startup from parameters we
+      // control, so it is always well-formed: unlike verify()'s Argon2id
+      // branch, there is no "corrupt stored hash" case to worry about here.
+      // Anything that throws from this call can therefore only be a genuine
+      // operational failure, and must not be swallowed — that would
+      // silently collapse the timing equalization this method exists to
+      // provide.
+      await argon2.verify(this.dummyHash, material);
     } catch (error) {
       this.logFailure(error);
       throw error;
