@@ -25,9 +25,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   async validate(payload: JwtPayload) {
     const user = await this.usersService.findById(payload.sub);
-    if (!user || !user.isActive) {
+
+    // The user is reloaded on every authenticated request, so deactivation and
+    // role changes take effect immediately rather than after the access token
+    // expires. The `role` claim in the token is informational and is never used
+    // for authorization — RolesGuard reads req.user.role, which is this row.
+    if (!user || !user.isActive || !user.emailVerifiedAt || !user.password) {
       throw new UnauthorizedException('Usuário não encontrado ou inativo');
     }
+
     return user;
   }
 }

@@ -1,21 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
 import { UserRole } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { HashingService } from '../hashing/hashing.service';
 
 const mockUser = {
   id: 'user-uuid-1',
   name: 'Admin User',
   email: 'admin@test.com',
-  password: 'hashed-password',
+  password: '$argon2id$v=19$m=65536,p=1,t=3$c2FsdHNhbHRzYWx0$aGFzaGhhc2hoYXNoaGFzaA',
   role: UserRole.admin,
   isActive: true,
   lastLogin: null,
+  emailVerifiedAt: new Date('2026-01-01'),
+  passwordSetAt: new Date('2026-01-01'),
+  passwordChangedAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -23,6 +26,13 @@ const mockUser = {
 const mockUsersService = {
   findByEmail: jest.fn(),
   findById: jest.fn(),
+};
+
+const mockHashingService = {
+  hash: jest.fn(),
+  verify: jest.fn(),
+  isBcryptHash: jest.fn(),
+  verifyDummy: jest.fn().mockResolvedValue(false),
 };
 
 const mockPrisma = {
@@ -35,6 +45,7 @@ const mockPrisma = {
   },
   user: {
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
 };
 
@@ -65,6 +76,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: HashingService, useValue: mockHashingService },
       ],
     }).compile();
 
@@ -87,16 +99,128 @@ describe('AuthService', () => {
 
     it('retorna null quando senha está errada', async () => {
       mockUsersService.findByEmail.mockResolvedValue(mockUser);
-      jest.spyOn(bcrypt, 'compare').mockImplementation(async () => false);
+      mockHashingService.verify.mockResolvedValue({ valid: false, needsRehash: false });
       const result = await service.validateUser('admin@test.com', 'wrong');
       expect(result).toBeNull();
     });
 
     it('retorna o usuário quando credenciais são válidas', async () => {
       mockUsersService.findByEmail.mockResolvedValue(mockUser);
-      jest.spyOn(bcrypt, 'compare').mockImplementation(async () => true);
+      mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: false });
       const result = await service.validateUser('admin@test.com', 'correct');
       expect(result).toEqual(mockUser);
+    });
+  });
+
+  describe('validateUser — eligibility gate', () => {
+    beforeEach(() => {
+      mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: false });
+    });
+
+    it('rejects an inactive user', async () => {
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, isActive: false });
+      await expect(service.validateUser('admin@test.com', 'uma senha bem comprida')).resolves.toBeNull();
+    });
+
+    it('rejects a user whose e-mail is not verified', async () => {
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, emailVerifiedAt: null });
+      await expect(service.validateUser('admin@test.com', 'uma senha bem comprida')).resolves.toBeNull();
+    });
+
+    it('rejects a user with no password set', async () => {
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, password: null });
+      await expect(service.validateUser('admin@test.com', 'uma senha bem comprida')).resolves.toBeNull();
+    });
+
+    it('never calls verify() when there is no eligible stored password', async () => {
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, password: null });
+      await service.validateUser('admin@test.com', 'uma senha bem comprida');
+      expect(mockHashingService.verify).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['nonexistent user', null],
+      ['inactive user', { ...mockUser, isActive: false }],
+      ['unverified user', { ...mockUser, emailVerifiedAt: null }],
+      ['passwordless user', { ...mockUser, password: null }],
+    ])('runs the dummy verification for a %s', async (_label, found) => {
+      mockUsersService.findByEmail.mockResolvedValue(found);
+      await service.validateUser('whoever@test.com', 'uma senha bem comprida');
+      expect(mockHashingService.verifyDummy).toHaveBeenCalledWith('uma senha bem comprida');
+    });
+
+    it('returns null identically for all ineligible conditions — nothing distinguishes them', async () => {
+      const results: unknown[] = [];
+      for (const found of [null, { ...mockUser, isActive: false }, { ...mockUser, emailVerifiedAt: null }, { ...mockUser, password: null }]) {
+        mockUsersService.findByEmail.mockResolvedValue(found);
+        results.push(await service.validateUser('whoever@test.com', 'uma senha bem comprida'));
+      }
+      expect(results).toEqual([null, null, null, null]);
+    });
+  });
+
+  describe('validateUser — bcrypt migration', () => {
+    it('rehashes to Argon2id after a valid bcrypt login', async () => {
+      const legacy = { ...mockUser, password: '$2b$12$legacyhashvalue' };
+      mockUsersService.findByEmail.mockResolvedValue(legacy);
+      mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: true });
+      mockHashingService.hash.mockResolvedValue('$argon2id$v=19$m=65536,p=1,t=3$new$hash');
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.validateUser('admin@test.com', 'Admin@123456');
+
+      expect(result).toEqual(legacy);
+      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({
+        where: { id: legacy.id, password: '$2b$12$legacyhashvalue' },
+        data: { password: '$argon2id$v=19$m=65536,p=1,t=3$new$hash' },
+      });
+    });
+
+    it('does not touch passwordChangedAt on a transparent rehash', async () => {
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, password: '$2a$12$legacy' });
+      mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: true });
+      mockHashingService.hash.mockResolvedValue('$argon2id$new');
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.validateUser('admin@test.com', 'Admin@123456');
+
+      const data = mockPrisma.user.updateMany.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('passwordChangedAt');
+    });
+
+    it('does not rehash an Argon2id password', async () => {
+      mockUsersService.findByEmail.mockResolvedValue(mockUser);
+      mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: false });
+
+      await service.validateUser('admin@test.com', 'uma senha bem comprida');
+
+      expect(mockHashingService.hash).not.toHaveBeenCalled();
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('does not rehash after an invalid bcrypt login', async () => {
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, password: '$2y$12$legacy' });
+      mockHashingService.verify.mockResolvedValue({ valid: false, needsRehash: false });
+
+      await expect(service.validateUser('admin@test.com', 'errada')).resolves.toBeNull();
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('does not log which algorithm the row used', async () => {
+      const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, password: '$2b$12$legacy' });
+      mockHashingService.verify.mockResolvedValue({ valid: true, needsRehash: true });
+      mockHashingService.hash.mockResolvedValue('$argon2id$new');
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.validateUser('admin@test.com', 'Admin@123456');
+
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
     });
   });
 
@@ -222,6 +346,53 @@ describe('AuthService', () => {
         data: { revoked: true },
       });
       expect(result).toEqual({ accessToken: 'new-access', refreshToken: 'new-refresh' });
+    });
+  });
+
+  describe('refreshTokens — user state gate', () => {
+    const storedToken = {
+      id: 'rt-1',
+      token: 'refresh-value',
+      revoked: false,
+      expiresAt: new Date(Date.now() + 86_400_000),
+      user: mockUser,
+    };
+
+    it.each([
+      ['inactive', { ...mockUser, isActive: false }],
+      ['unverified', { ...mockUser, emailVerifiedAt: null }],
+      ['passwordless', { ...mockUser, password: null }],
+    ])('refuses to rotate for an %s user', async (_label, user) => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({ ...storedToken, user });
+      mockPrisma.refreshToken.update.mockResolvedValue({});
+
+      await expect(service.refreshTokens('refresh-value')).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('revokes the presented token when the user is ineligible', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        ...storedToken,
+        user: { ...mockUser, isActive: false },
+      });
+      mockPrisma.refreshToken.update.mockResolvedValue({});
+
+      await expect(service.refreshTokens('refresh-value')).rejects.toThrow();
+      expect(mockPrisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: 'rt-1' },
+        data: { revoked: true },
+      });
+    });
+
+    it('keeps the existing generic message', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        ...storedToken,
+        user: { ...mockUser, isActive: false },
+      });
+      mockPrisma.refreshToken.update.mockResolvedValue({});
+
+      await expect(service.refreshTokens('refresh-value')).rejects.toThrow(
+        'Token de refresh inválido ou expirado',
+      );
     });
   });
 
