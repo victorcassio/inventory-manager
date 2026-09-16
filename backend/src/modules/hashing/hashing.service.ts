@@ -164,15 +164,26 @@ export class HashingService implements OnModuleInit {
       // throwing — that is the expected, silent path this method exists
       // for. The dummy hash is generated once at startup from parameters we
       // control, so it is always well-formed: unlike verify()'s Argon2id
-      // branch, there is no "corrupt stored hash" case to worry about here.
-      // Anything that throws from this call can therefore only be a genuine
-      // operational failure, and must not be swallowed — that would
-      // silently collapse the timing equalization this method exists to
-      // provide.
+      // branch, there is no "corrupt stored hash" case to worry about here,
+      // so anything that throws from this call can only be a genuine
+      // operational failure (allocation, native binding).
       await argon2.verify(this.dummyHash, material);
     } catch (error) {
+      // Deliberately does NOT rethrow. verify() answers an operational
+      // failure with the safe {valid:false} rather than propagating it (see
+      // "Fix round 3"); if this method kept rethrowing instead, the two
+      // authentication paths would answer differently during the exact
+      // same degraded window — verify() a 401 for an eligible account,
+      // verifyDummy() a 500 for everyone else — turning the response code
+      // into an account-enumeration oracle that tells an attacker whether
+      // a live, activated account exists at a given address. That is the
+      // opposite of what this method exists for. So: log it (operations
+      // still needs the signal) and fall through to the same `false` a
+      // mismatch would have produced. A missing pepper is NOT covered by
+      // this catch — deriveMaterial() above is deliberately outside it, so
+      // that configuration failure still propagates from here exactly as
+      // it does from verify().
       this.logFailure(error);
-      throw error;
     }
     return false;
   }
@@ -198,8 +209,28 @@ export class HashingService implements OnModuleInit {
    * Argon2id) was involved.
    */
   private logFailure(error: unknown): void {
-    this.logger.error(
-      `Password verification failed unexpectedly: ${error instanceof Error ? error.message : 'unknown error'}`,
-    );
+    this.logger.error(`Password verification failed unexpectedly: ${this.describeError(error)}`);
+  }
+
+  /**
+   * Extracts a loggable description of `error` without relying on
+   * `instanceof Error`. Errors thrown by native (N-API) addons — argon2's
+   * and bcrypt's binding failures included — are not guaranteed to satisfy
+   * `instanceof Error` when the check runs in a different V8 realm/context
+   * than the one that constructed them (observed directly under Jest's
+   * sandboxed test environment; see "Fix round 3"/"Fix round 4" in the
+   * Task 2 report). An `instanceof` check that can silently fail would
+   * erase the native failure message this logging exists to surface,
+   * defeating the "log it, don't hide it" posture the security review
+   * requires. Every message reachable on these paths is a static or
+   * count/template-only string (argon2's native error table — e.g.
+   * "Output is too short", "Memory allocation error" — @phc/format's
+   * regex-derived parse messages, and bcrypt's fixed salt-format message):
+   * none of them can contain the stored hash, the password, the pepper, or
+   * which hash family was involved.
+   */
+  private describeError(error: unknown): string {
+    const message = (error as { message?: unknown } | null | undefined)?.message;
+    return typeof message === 'string' && message.length > 0 ? message : String(error);
   }
 }

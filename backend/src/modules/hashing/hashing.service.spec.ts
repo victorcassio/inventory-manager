@@ -146,6 +146,37 @@ describe('HashingService', () => {
         errorSpy.mockRestore();
       }
     });
+
+    it('logs the real failure text even for a non-Error rejection, instead of falling back to "unknown error"', async () => {
+      // instanceof Error is not a reliable signal for errors that cross a
+      // realm/context boundary (observed with argon2's native binding
+      // under Jest's sandboxed test environment — see "Fix round 3"). A
+      // rejection with a bare string is the simplest reproduction: it was
+      // never an Error to begin with, so this proves the extraction does
+      // not depend on the prototype chain at all.
+      const hash = await service.hash('uma senha bem comprida');
+      const password = 'uma senha bem comprida';
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const verifySpy = jest
+        .spyOn(argon2, 'verify')
+        .mockRejectedValueOnce('ARGON2_MEMORY_ALLOCATION_ERROR');
+
+      try {
+        await expect(service.verify(hash, password)).resolves.toEqual({
+          valid: false,
+          needsRehash: false,
+        });
+
+        const loggedText = errorSpy.mock.calls.map(call => String(call[0])).join('\n');
+        expect(loggedText).toContain('ARGON2_MEMORY_ALLOCATION_ERROR');
+        expect(loggedText).not.toContain('unknown error');
+        expect(loggedText).not.toContain(password);
+        expect(loggedText).not.toContain(hash);
+      } finally {
+        verifySpy.mockRestore();
+        errorSpy.mockRestore();
+      }
+    });
   });
 
   describe('isBcryptHash', () => {
@@ -181,6 +212,29 @@ describe('HashingService', () => {
       const module = await moduleWith(TEST_PEPPER);
       const uninitialized = module.get(HashingService);
       await expect(uninitialized.verifyDummy('qualquer coisa')).rejects.toThrow(/onModuleInit/);
+    });
+
+    it('resolves false (not rejects) and logs when argon2.verify() fails operationally — symmetric with verify()', async () => {
+      // Asymmetry here is an account-enumeration oracle: during a degraded
+      // window (memory limit too low, broken native binding), an eligible
+      // account routes through verify() -> {valid:false} -> 401, while an
+      // ineligible account routes through verifyDummy(). If verifyDummy()
+      // rethrew, that path would answer 500 instead — and a 500 vs. 401
+      // would tell an attacker whether a live, activated account exists at
+      // a given address. verifyDummy() must answer exactly like verify()
+      // does: log it, then resolve false.
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const verifySpy = jest
+        .spyOn(argon2, 'verify')
+        .mockRejectedValueOnce(new Error('ARGON2_MEMORY_ALLOCATION_ERROR'));
+
+      try {
+        await expect(service.verifyDummy('qualquer coisa')).resolves.toBe(false);
+        expect(errorSpy).toHaveBeenCalled();
+      } finally {
+        verifySpy.mockRestore();
+        errorSpy.mockRestore();
+      }
     });
   });
 
