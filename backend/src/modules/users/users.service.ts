@@ -170,6 +170,13 @@ export class UsersService {
   ): Promise<UserResponse> {
     const target = await this.requireManageableTarget(id);
 
+    // Same reasoning as create(): the DTO restricts this, but a DTO is not a
+    // security boundary. Any internal caller that bypasses the HTTP pipe would
+    // otherwise be able to write role: 'admin' straight into the row.
+    if (dto.role !== undefined && !INVITABLE_ROLES.includes(dto.role as any)) {
+      throw new ForbiddenException('Não é permitido atribuir o perfil de administrador por este fluxo');
+    }
+
     if (dto.role && id === actorId) {
       throw new ForbiddenException('Você não pode alterar seu próprio perfil por este fluxo');
     }
@@ -284,12 +291,8 @@ export class UsersService {
   }
 
   async revokeInvitation(id: string, actorId: string, ipAddress?: string): Promise<void> {
-    // ipAddress is accepted for signature symmetry with the other four
-    // mutations (Task 11's controller passes @Ip() uniformly); the audit
-    // entry itself is written by InvitationsService.revoke, which this
-    // task must not modify.
     await this.requireManageableTarget(id);
-    await this.invitations.revoke(id, actorId);
+    await this.invitations.revoke(id, actorId, ipAddress);
   }
 
   /** 404 when absent, 403 when the target is an admin (admin management is out of scope). */

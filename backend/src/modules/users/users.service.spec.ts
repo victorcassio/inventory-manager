@@ -266,6 +266,13 @@ describe('UsersService', () => {
       );
     });
 
+    it('refuses to assign the admin role even if the DTO is bypassed', async () => {
+      await expect(
+        service.update('user-1', { role: 'admin' as any }, 'admin-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
     it('passes the ipAddress into the update_user audit entry', async () => {
       await service.update('user-1', { name: 'Maria Silva' }, 'admin-1', '203.0.113.9');
 
@@ -377,7 +384,13 @@ describe('UsersService', () => {
     it('delegates to InvitationsService', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(row);
       await service.revokeInvitation('user-1', 'admin-1');
-      expect(mockInvitations.revoke).toHaveBeenCalledWith('user-1', 'admin-1');
+      expect(mockInvitations.revoke).toHaveBeenCalledWith('user-1', 'admin-1', undefined);
+    });
+
+    it('forwards the ipAddress to InvitationsService.revoke', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(row);
+      await service.revokeInvitation('user-1', 'admin-1', '203.0.113.9');
+      expect(mockInvitations.revoke).toHaveBeenCalledWith('user-1', 'admin-1', '203.0.113.9');
     });
   });
 });

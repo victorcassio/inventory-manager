@@ -139,7 +139,7 @@ export class InvitationsService {
     // Deliberately no tokens returned: the user is sent to the login screen.
   }
 
-  async revoke(userId: string, actorId: string): Promise<void> {
+  async revoke(userId: string, actorId: string, ipAddress?: string): Promise<void> {
     await this.prisma.$transaction(async (tx: Tx) => {
       const revoked = await this.tokens.revokePending(
         userId,
@@ -157,6 +157,7 @@ export class InvitationsService {
           action: 'revoke_user_invitation',
           entity: 'User',
           entityId: userId,
+          ipAddress,
         },
         tx,
       );

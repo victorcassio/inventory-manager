@@ -255,5 +255,19 @@ describe('InvitationsService', () => {
         'Nenhum convite pendente para este usuário',
       );
     });
+
+    it('passes the ipAddress into the revoke_user_invitation audit entry', async () => {
+      mockTokens.revokePending.mockResolvedValue(1);
+
+      await service.revoke('user-1', 'admin-1', '203.0.113.9');
+
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'revoke_user_invitation',
+          ipAddress: '203.0.113.9',
+        }),
+        expect.anything(),
+      );
+    });
   });
 });
