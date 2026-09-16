@@ -5,7 +5,9 @@ import helmet from 'helmet';
 import { AppModule } from '../src/app.module';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { PrismaService } from '../src/prisma/prisma.service';
-import * as bcrypt from 'bcrypt';
+import { hashSeedPassword } from '../prisma/seed-hash';
+
+const testPassword = 'E2E senha de teste bem comprida';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -32,16 +34,19 @@ describe('Auth (e2e)', () => {
 
     prisma = module.get<PrismaService>(PrismaService);
 
-    const hashed = await bcrypt.hash('Test@123456', 12);
+    const hashed = await hashSeedPassword(testPassword);
+    const now = new Date();
     await prisma.user.upsert({
       where: { email: 'e2e-test@test.com' },
-      update: { password: hashed },
+      update: { password: hashed, emailVerifiedAt: now, passwordSetAt: now, isActive: true },
       create: {
         name: 'E2E Test User',
         email: 'e2e-test@test.com',
         password: hashed,
         role: 'admin',
         isActive: true,
+        emailVerifiedAt: now,
+        passwordSetAt: now,
       },
     });
   });
@@ -58,7 +63,7 @@ describe('Auth (e2e)', () => {
     it('retorna 200 com tokens quando credenciais são válidas', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'e2e-test@test.com', password: 'Test@123456' });
+        .send({ email: 'e2e-test@test.com', password: testPassword });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('accessToken');
@@ -86,7 +91,7 @@ describe('Auth (e2e)', () => {
     it('retorna novos tokens com refresh token válido', async () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'e2e-test@test.com', password: 'Test@123456' });
+        .send({ email: 'e2e-test@test.com', password: testPassword });
 
       const { refreshToken } = loginRes.body;
 
@@ -113,7 +118,7 @@ describe('Auth (e2e)', () => {
     it('retorna dados do usuário autenticado sem password', async () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'e2e-test@test.com', password: 'Test@123456' });
+        .send({ email: 'e2e-test@test.com', password: testPassword });
 
       const { accessToken } = loginRes.body;
 
@@ -136,7 +141,7 @@ describe('Auth (e2e)', () => {
     it('revoga o refresh token e impede novo uso', async () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'e2e-test@test.com', password: 'Test@123456' });
+        .send({ email: 'e2e-test@test.com', password: testPassword });
 
       const { accessToken, refreshToken } = loginRes.body;
 
