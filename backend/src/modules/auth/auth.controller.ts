@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  Ip,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -62,22 +63,22 @@ export class AuthController {
   @Throttle({ global: { ttl: 900_000, limit: 5 } })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.passwordService.requestReset(dto.email);
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Ip() ip: string) {
+    return this.passwordService.requestReset(dto.email, ip);
   }
 
   @Throttle({ global: { ttl: 900_000, limit: 10 } })
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    await this.passwordService.resetPassword(dto);
+  async resetPassword(@Body() dto: ResetPasswordDto, @Ip() ip: string) {
+    await this.passwordService.resetPassword(dto, ip);
   }
 
   @UseGuards(JwtAuthGuard)
   @Throttle({ global: { ttl: 900_000, limit: 10 } })
   @Post('change-password')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto) {
-    await this.passwordService.changePassword(user.id, dto);
+  async changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto, @Ip() ip: string) {
+    await this.passwordService.changePassword(user.id, dto, ip);
   }
 }

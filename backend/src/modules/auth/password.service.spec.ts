@@ -61,6 +61,11 @@ describe('PasswordService', () => {
     mockTokens.countRecent.mockResolvedValue(0);
     mockTokens.revokePending.mockResolvedValue(0);
     mockTokens.issue.mockResolvedValue('RAW_TOKEN');
+    // requestReset() fires this off without awaiting it — it must always
+    // return a real promise (not undefined) for the unawaited .catch() to
+    // attach to. Individual tests override this with mockRejectedValue /
+    // a never-settling promise as needed.
+    mockMail.send.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -171,6 +176,35 @@ describe('PasswordService', () => {
       const actions = mockAudit.log.mock.calls.map(c => c[0].action);
       expect(actions).not.toContain('request_password_reset');
     });
+
+    it('resolves without waiting on a pending (never-settling) SMTP send', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(user);
+      // A promise that never resolves or rejects — if requestReset awaited
+      // this, the test would time out. It must not.
+      mockMail.send.mockReturnValue(new Promise<void>(() => {}));
+
+      await expect(service.requestReset('maria@test.com')).resolves.toEqual({
+        message: GENERIC_RESET_MESSAGE,
+      });
+    });
+
+    it('emits an identical operational log line for an eligible and an ineligible address', async () => {
+      const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+
+      mockPrisma.user.findUnique.mockResolvedValue(user);
+      await service.requestReset('maria@test.com', '203.0.113.7');
+      const eligibleLine = spy.mock.calls[0][0];
+
+      spy.mockClear();
+
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await service.requestReset('ninguem@test.com', '203.0.113.7');
+      const ineligibleLine = spy.mock.calls[0][0];
+
+      expect(eligibleLine).toBe(ineligibleLine);
+      expect(String(eligibleLine)).toContain('203.0.113.7');
+      spy.mockRestore();
+    });
   });
 
   describe('resetPassword', () => {
@@ -231,6 +265,13 @@ describe('PasswordService', () => {
 
       expect(mockHashing.hash).toHaveBeenCalledWith(dto.password);
       expect(mockHashing.rehashLegacy).not.toHaveBeenCalled();
+    });
+
+    it('passes the ipAddress into the reset_password audit entry', async () => {
+      await service.resetPassword(dto, '203.0.113.9');
+
+      const entry = mockAudit.log.mock.calls.find(c => c[0].action === 'reset_password')?.[0];
+      expect(entry?.ipAddress).toBe('203.0.113.9');
     });
   });
 
@@ -350,6 +391,17 @@ describe('PasswordService', () => {
 
       expect(mockHashing.hash).toHaveBeenCalledWith(dto.newPassword);
       expect(mockHashing.rehashLegacy).not.toHaveBeenCalled();
+    });
+
+    it('passes the ipAddress into the change_password audit entry', async () => {
+      mockHashing.verify
+        .mockResolvedValueOnce({ valid: true, needsRehash: false })
+        .mockResolvedValueOnce({ valid: false, needsRehash: false });
+
+      await service.changePassword('user-1', dto, '203.0.113.9');
+
+      const entry = mockAudit.log.mock.calls.find(c => c[0].action === 'change_password')?.[0];
+      expect(entry?.ipAddress).toBe('203.0.113.9');
     });
   });
 });

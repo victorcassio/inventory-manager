@@ -52,4 +52,39 @@ describe('JwtStrategy', () => {
       strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin' }),
     ).rejects.toThrow('Usuário não encontrado ou inativo');
   });
+
+  describe('passwordChangedAt vs token iat', () => {
+    const changedAt = new Date('2026-06-01T12:00:00.000Z');
+    const changedUser = { ...eligible, passwordChangedAt: changedAt };
+
+    it('rejects a token issued before the last password change', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
+      const iatBefore = Math.floor(new Date('2026-06-01T11:59:00.000Z').getTime() / 1000);
+
+      await expect(
+        strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin', iat: iatBefore }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('accepts a token issued after the last password change', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
+      const iatAfter = Math.floor(new Date('2026-06-01T12:01:00.000Z').getTime() / 1000);
+
+      await expect(
+        strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin', iat: iatAfter }),
+      ).resolves.toEqual(changedUser);
+    });
+
+    it('accepts any token for a user with passwordChangedAt null (legacy account)', async () => {
+      // The migration deliberately left this column NULL for pre-existing
+      // users. Without the null guard in the strategy, every one of them
+      // would be locked out instantly regardless of iat.
+      (usersService.findById as jest.Mock).mockResolvedValue(eligible);
+      const veryOldIat = 0;
+
+      await expect(
+        strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin', iat: veryOldIat }),
+      ).resolves.toEqual(eligible);
+    });
+  });
 });

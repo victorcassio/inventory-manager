@@ -42,7 +42,15 @@ export class PasswordService {
    * early return below is silent on purpose — distinguishing them would
    * enumerate accounts.
    */
-  async requestReset(email: string): Promise<{ message: string }> {
+  async requestReset(email: string, ipAddress?: string): Promise<{ message: string }> {
+    // The only forensic trail a reset request leaves: no AuditLog row is
+    // written (the request is anonymous — see resetPassword/changePassword
+    // for the attributed alternative), so this operational line is it. It is
+    // emitted unconditionally, before any branching on account state, and
+    // its content never varies with eligibility — otherwise the log itself
+    // would become an account-existence oracle for anyone reading it.
+    this.logger.log(`[password-reset] solicitação recebida ip=${ipAddress ?? 'desconhecido'}`);
+
     const normalized = email.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({ where: { email: normalized } });
 
@@ -69,21 +77,27 @@ export class PasswordService {
     // Fragment, not query string: the token never reaches a server log or a Referer.
     const resetUrl = `${frontendUrl}/reset-password#token=${rawToken}`;
 
-    try {
-      await this.mail.send({
+    // Deliberately NOT awaited. Awaiting the SMTP dialogue would make an
+    // eligible address answer hundreds of milliseconds slower than a
+    // nonexistent one, turning response latency into an account-existence
+    // oracle that the uniform response body is meant to prevent. The .catch
+    // is mandatory — an unhandled rejection would crash the process on some
+    // Node configurations.
+    void this.mail
+      .send({
         to: user.email,
         ...buildPasswordResetEmail({ name: user.name, resetUrl }),
+      })
+      .catch(() => {
+        // The public response must not change. Nothing identifying is logged.
+        this.logger.error('Falha ao enviar e-mail de redefinição de senha (detalhes omitidos)');
       });
-    } catch {
-      // The public response must not change. Nothing identifying is logged.
-      this.logger.error('Falha ao enviar e-mail de redefinição de senha (detalhes omitidos)');
-    }
 
     // No audit entry: the request is anonymous and AuditLog.userId means "actor".
     return { message: GENERIC_RESET_MESSAGE };
   }
 
-  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+  async resetPassword(dto: ResetPasswordDto, ipAddress?: string): Promise<void> {
     if (dto.password !== dto.passwordConfirmation) {
       throw new BadRequestException('A confirmação não corresponde à senha');
     }
@@ -108,13 +122,13 @@ export class PasswordService {
       });
 
       await this.audit.log(
-        { userId, action: 'reset_password', entity: 'User', entityId: userId },
+        { userId, action: 'reset_password', entity: 'User', entityId: userId, ipAddress },
         tx,
       );
     });
   }
 
-  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+  async changePassword(userId: string, dto: ChangePasswordDto, ipAddress?: string): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user || !user.isActive || !user.emailVerifiedAt || !user.password) {
@@ -155,7 +169,7 @@ export class PasswordService {
       });
 
       await this.audit.log(
-        { userId, action: 'change_password', entity: 'User', entityId: userId },
+        { userId, action: 'change_password', entity: 'User', entityId: userId, ipAddress },
         tx,
       );
     });
