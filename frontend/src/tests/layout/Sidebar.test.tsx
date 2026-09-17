@@ -70,6 +70,22 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Financeiro')).not.toBeInTheDocument()
   })
 
+  it('shows Usuários nav item for admin role', () => {
+    renderSidebar(makeUser('admin'))
+    const link = screen.getByText('Usuários').closest('a')
+    expect(link).toHaveAttribute('href', '/users')
+  })
+
+  it('does not show Usuários for attendant role', () => {
+    renderSidebar(makeUser('attendant'))
+    expect(screen.queryByText('Usuários')).not.toBeInTheDocument()
+  })
+
+  it('does not show Usuários for financial role', () => {
+    renderSidebar(makeUser('financial'))
+    expect(screen.queryByText('Usuários')).not.toBeInTheDocument()
+  })
+
   it('shows user name', () => {
     renderSidebar(makeUser('admin'))
     expect(screen.getByText('João Silva')).toBeInTheDocument()

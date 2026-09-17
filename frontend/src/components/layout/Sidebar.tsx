@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Package, FileText, CreditCard,
-  TrendingUp, LogOut, ClipboardList, Calendar,
+  TrendingUp, LogOut, ClipboardList, Calendar, UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ const navItems: NavItem[] = [
   { label: 'Pagamentos',   href: '/payments',                   icon: CreditCard,      roles: ['admin', 'financial'] },
   { label: 'Financeiro',   href: '/financial',                  icon: TrendingUp,      roles: ['admin', 'financial'] },
   { label: 'Documentos',   href: '/documents',                  icon: FileText,        roles: ['admin', 'attendant', 'financial'] },
+  { label: 'Usuários',     href: '/users',                       icon: UserCog,         roles: ['admin'] },
 ]
 
 const ROLE_LABELS: Record<UserRole, string> = {

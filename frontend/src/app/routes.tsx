@@ -1,6 +1,7 @@
 import { lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
+import { RoleGuard } from '@/components/layout/RoleGuard'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AuthLayout } from '@/components/layout/AuthLayout'
 
@@ -76,6 +77,15 @@ const FinancialDetailPage = lazy(() =>
 const FinancialEditPage = lazy(() =>
   import('@/features/financial/pages/FinancialEditPage').then((m) => ({ default: m.FinancialEditPage }))
 )
+const UsersListPage = lazy(() =>
+  import('@/features/users/pages/UsersListPage').then((m) => ({ default: m.UsersListPage }))
+)
+const UserNewPage = lazy(() =>
+  import('@/features/users/pages/UserNewPage').then((m) => ({ default: m.UserNewPage }))
+)
+const UserEditPage = lazy(() =>
+  import('@/features/users/pages/UserEditPage').then((m) => ({ default: m.UserEditPage }))
+)
 const DocumentsListPage = lazy(() =>
   import('@/features/documents/pages/DocumentsListPage').then((m) => ({ default: m.DocumentsListPage }))
 )
@@ -124,6 +134,17 @@ export function AppRoutes() {
             <Route path="/financial/transactions/new" element={<FinancialNewPage />} />
             <Route path="/financial/transactions/:id" element={<FinancialDetailPage />} />
             <Route path="/financial/transactions/:id/edit" element={<FinancialEditPage />} />
+
+            {/* Admin-only: RBAC here is UX. The backend independently enforces
+                @Roles(admin) on every /users/* endpoint (UsersController), so
+                this guard only spares a non-admin an unnecessary round trip and
+                a confusing render — it grants no access the API would not
+                already refuse. */}
+            <Route element={<RoleGuard allowedRoles={['admin']} />}>
+              <Route path="/users" element={<UsersListPage />} />
+              <Route path="/users/new" element={<UserNewPage />} />
+              <Route path="/users/:id/edit" element={<UserEditPage />} />
+            </Route>
           </Route>
         </Route>
 
