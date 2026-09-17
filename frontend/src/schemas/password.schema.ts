@@ -46,7 +46,14 @@ export const passwordFieldSchema = z
 export const forgotPasswordSchema = z.object({
   // Normalised like createUserSchema's e-mail: a pasted address with a stray
   // space or capital should not be rejected in the browser.
-  email: z.string().trim().toLowerCase().email('E-mail inválido'),
+  // max mirrors the DTO's @MaxLength(150), which carries no custom message —
+  // without this the user would get class-validator's English default.
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email('E-mail inválido')
+    .max(150, 'Máximo de 150 caracteres'),
 })
 
 const withConfirmation = z
