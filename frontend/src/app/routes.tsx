@@ -9,6 +9,15 @@ import { LoginPage }     from '@/pages/LoginPage'
 import { NotFoundPage }  from '@/pages/NotFoundPage'
 import { ForbiddenPage } from '@/pages/ForbiddenPage'
 
+// Deliberately eager, not lazy. These three pages are reached from a link in an
+// e-mail carrying a single-use token in the URL fragment, and the fragment is
+// only stripped once the page has mounted. A lazy route would leave the token
+// in the address bar for the whole download — seconds on a mobile connection —
+// where a screen-share or a shoulder can read it.
+import { ActivateAccountPage } from '@/features/auth/pages/ActivateAccountPage'
+import { ForgotPasswordPage }  from '@/features/auth/pages/ForgotPasswordPage'
+import { ResetPasswordPage }   from '@/features/auth/pages/ResetPasswordPage'
+
 // ─── Lazy (feature pages — carregadas sob demanda) ───────────────────────────
 const DashboardPage = lazy(() =>
   import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
@@ -79,8 +88,13 @@ export function AppRoutes() {
     <BrowserRouter>
       <Routes>
         {/* Public routes */}
+        {/* Public: no ProtectedRoute. Someone activating an account or
+            resetting a password has no session yet, by definition. */}
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/activate-account" element={<ActivateAccountPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
         </Route>
 
         {/* Protected routes */}

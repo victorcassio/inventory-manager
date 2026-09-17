@@ -5,6 +5,10 @@ import { cn } from '@/lib/utils'
 interface PasswordRequirementsProps {
   value: string
   confirmation?: string
+  /** For a field's aria-describedby. Points at the list, never at the wrapper:
+   *  the wrapper would flatten the terminal status text into the description a
+   *  screen reader reads on every focus. */
+  id?: string
 }
 
 const MET = 'Requisito atendido'
@@ -26,7 +30,7 @@ const ALL_MET = 'A senha atende a todos os requisitos'
  * whose items each carry their own state in words, and a separate status region
  * speaks once, when the password finally satisfies everything.
  */
-export function PasswordRequirements({ value, confirmation }: PasswordRequirementsProps) {
+export function PasswordRequirements({ value, confirmation, id }: PasswordRequirementsProps) {
   const rules = [
     // Each rule answers for itself. An empty field genuinely satisfies "no
     // more than 128 characters" and "not a common password" — the shared
@@ -59,7 +63,7 @@ export function PasswordRequirements({ value, confirmation }: PasswordRequiremen
       {/* Named, so a screen-reader user browsing the page meets a labelled
           list rather than four orphan items. Pages should also point the
           field's aria-describedby at this id. */}
-      <ul id="password-requirements" role="list" aria-label="Requisitos da senha" className="space-y-1 text-xs">
+      <ul id={id} role="list" aria-label="Requisitos da senha" className="space-y-1 text-xs">
         {rules.map((rule) => {
           const Icon = rule.met ? Check : Minus
           return (

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -84,7 +85,7 @@ export function LoginForm() {
               )}
             />
             {apiError && (
-              <p className="text-sm font-medium text-destructive">{apiError}</p>
+              <p className="text-sm font-medium text-destructive-text">{apiError}</p>
             )}
             <Button
               type="submit"
@@ -95,6 +96,10 @@ export function LoginForm() {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Entrar
+            </Button>
+
+            <Button asChild variant="link" className="w-full font-normal">
+              <Link to="/forgot-password">Esqueci minha senha</Link>
             </Button>
           </form>
         </Form>

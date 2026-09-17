@@ -31,8 +31,11 @@ const KNOWN_POLICY_MESSAGES = new Set([
   'A confirmação não corresponde à senha',
   'A nova senha deve ser diferente da senha atual',
   'Senha atual incorreta',
-  // Not password policy, but one of ours and safe to show: the forgot-password
-  // endpoint returns it for a malformed address.
+  // Not password policy, but one of ours and safe to show. The forgot-password
+  // page deliberately never reaches here — every failure there becomes the
+  // generic message, so the response cannot say whether an address exists —
+  // but any future form that does classify an e-mail rejection should be able
+  // to show our own wording rather than class-validator's English default.
   'E-mail inválido',
 ])
 

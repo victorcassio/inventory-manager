@@ -99,6 +99,21 @@ describe('PasswordInput', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Senha oculta')
   })
 
+  it('stays silent on the keyboard path, where the toggle itself is announced', async () => {
+    const user = userEvent.setup()
+    render(<PasswordInput value="segredo" onChange={vi.fn()} autoComplete="new-password" />)
+
+    await user.tab()
+    await user.tab()
+    expect(toggle()).toHaveFocus()
+    await user.keyboard('{Enter}')
+
+    // Focus is on the toggle, so assistive technology already reads its new
+    // name and pressed state. A region firing here would say it twice.
+    expect(input()).toHaveAttribute('type', 'text')
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+
   it('lets a caller override the test id, since a page renders two of these', () => {
     render(
       <PasswordInput

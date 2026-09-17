@@ -21,6 +21,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
     const [visible, setVisible] = useState(false)
     const [announcement, setAnnouncement] = useState('')
     const inputRef = useRef<HTMLInputElement | null>(null)
+    const toggleRef = useRef<HTMLButtonElement | null>(null)
     // Captured on toggle, restored after the re-render: switching the input's
     // type resets the selection in every browser, which would drop the caret to
     // the end of the field mid-word.
@@ -52,7 +53,16 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
       // double-invokes it. `visible` cannot be stale inside a click handler.
       const next = !visible
       setVisible(next)
-      setAnnouncement(next ? 'Senha visível' : 'Senha oculta')
+
+      // Only where nothing else speaks. On the keyboard path focus is on the
+      // toggle, so assistive technology already announces its new name and
+      // pressed state — a region firing as well would say the same thing
+      // twice. On the mouse and touch paths focus never reaches the button
+      // (mousedown is prevented) and this is the ONLY announcement there.
+      // Clearing it is silent, so a keyboard toggle after a mouse one adds
+      // nothing.
+      const toggleIsFocused = document.activeElement === toggleRef.current
+      setAnnouncement(toggleIsFocused ? '' : next ? 'Senha visível' : 'Senha oculta')
     }
 
     const Icon = visible ? EyeOff : Eye
@@ -77,6 +87,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           className={cn('pr-10', className)}
         />
         <button
+          ref={toggleRef}
           // Never "submit": inside a form, a default-type button would send it.
           type="button"
           // Keeps focus in the field when the toggle is clicked: without this,
