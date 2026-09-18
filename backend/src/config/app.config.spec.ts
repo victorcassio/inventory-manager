@@ -1,4 +1,10 @@
+import { randomBytes } from 'crypto';
 import appConfig from './app.config';
+
+/** A random, non-placeholder value that passes the production insecure-pattern check. */
+function randomStrongSecret(): string {
+  return randomBytes(36).toString('base64url');
+}
 
 const BASE_ENV = {
   DATABASE_URL: 'postgresql://u:p@localhost:5440/db',
@@ -56,6 +62,27 @@ describe('appConfig', () => {
     process.env.NODE_ENV = 'production';
     process.env.MAIL_DRIVER = 'smtp';
     expect(() => appConfig()).toThrow(/SMTP_HOST/);
+  });
+
+  it('starts with a complete, non-placeholder production configuration', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_ACCESS_SECRET = randomStrongSecret();
+    process.env.JWT_REFRESH_SECRET = randomStrongSecret();
+    process.env.PASSWORD_PEPPER = randomStrongSecret();
+    process.env.MAIL_DRIVER = 'smtp';
+    process.env.SMTP_HOST = 'smtp.example.com';
+    process.env.SMTP_PORT = '587';
+    process.env.SMTP_USER = 'apikey';
+    process.env.SMTP_PASSWORD = randomStrongSecret();
+    process.env.SMTP_FROM = 'no-reply@example.com';
+    process.env.FRONTEND_URL = 'https://app.example.com';
+
+    const cfg = appConfig();
+
+    expect(cfg.nodeEnv).toBe('production');
+    expect(cfg.mail.driver).toBe('smtp');
+    expect(cfg.mail.smtp.host).toBe('smtp.example.com');
+    expect(cfg.jwt.accessSecret).toBe(process.env.JWT_ACCESS_SECRET);
   });
 
   it('never returns the pepper under a key that looks loggable', () => {

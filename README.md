@@ -83,11 +83,19 @@ Designed for companies that rent scaffolding, tools, generators, construction eq
 
 - Email and password login with rotating JWT refresh tokens
 - 3 access roles with granular permissions:
-  - **Admin** — full access
+  - **Admin** — full access, plus user management (`/users`)
   - **Attendant** — rental operations, returns, inventory, and documents
   - **Financial** — dashboard, payments, financial entries, and documents
 - Guards on all sensitive backend endpoints
 - Frontend route protection with automatic redirects
+- Admin-driven user onboarding by e-mail invitation (`attendant`/`financial`),
+  account activation, self-service password recovery, and an authenticated
+  "change password" page (`/account/security`) open to every role
+- Argon2id password hashing with a server-side pepper (HMAC-SHA-256) and a
+  transparent, per-login migration path from the legacy bcrypt hashes —
+  see [`docs/authentication-rbac.md`](docs/authentication-rbac.md) for the
+  full design and [`docs/migrations-and-seeds.md`](docs/migrations-and-seeds.md)
+  for the migration that introduced it
 
 ### Dashboard
 
@@ -330,7 +338,7 @@ npm install
 
 # Copy and configure environment variables
 cp .env.example .env
-# edit DATABASE_URL, JWT_SECRET, etc.
+# edit DATABASE_URL, JWT_ACCESS_SECRET, PASSWORD_PEPPER, etc.
 
 # Apply migrations
 npx prisma migrate dev
@@ -372,20 +380,48 @@ npm run dev
 
 ### Backend (`backend/.env`)
 
+See [`backend/.env.example`](backend/.env.example) for the authoritative list.
+No real credential ever belongs in this file's example values or in this
+README — every placeholder below is illustrative only.
+
 ```env
 # Database
 DATABASE_URL="postgresql://inventory_user:inventory_pass_dev@localhost:5440/inventory_db"
 
 # JWT
-JWT_SECRET="your-secret-key-here"
-JWT_EXPIRES_IN="15m"
-JWT_REFRESH_SECRET="your-refresh-secret-here"
+JWT_ACCESS_SECRET="min-32-chars-change-me-in-production"
+JWT_REFRESH_SECRET="different-secret-min-32-chars-change-me"
+JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 
 # App
 PORT=3003
+NODE_ENV=development
 FRONTEND_URL="http://localhost:5173"
+
+# Password hashing — generate with: openssl rand -base64 48
+# Required. The app refuses to start without it. See docs/authentication-rbac.md.
+PASSWORD_PEPPER=
+
+# Mail — "fake" only logs (dev/test); production requires "smtp" and refuses to start otherwise
+MAIL_DRIVER=fake
+SMTP_HOST=
+SMTP_PORT=
+SMTP_SECURE=
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+
+# One-time bootstrap password for prisma/seed.ts — never commit a real value
+SEED_ADMIN_PASSWORD=
 ```
+
+> `NODE_ENV=production` makes the app refuse to start if `PASSWORD_PEPPER`,
+> `JWT_ACCESS_SECRET` or `JWT_REFRESH_SECRET` are missing, too short, or look
+> like a placeholder (`secret`, `test`, `example`, `changeme`), or if
+> `MAIL_DRIVER` is anything other than `smtp` with a complete SMTP config.
+> Full details: [`docs/authentication-rbac.md`](docs/authentication-rbac.md)
+> and [`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md).
 
 ### Frontend (`frontend/.env`)
 
@@ -453,6 +489,11 @@ npx prisma migrate reset --force
 | `20260515150000_add_payment_id_to_financial_transaction` | Payment → financial entry association |
 | `20260515151000_add_void_fields_to_financial_transaction` | Entry voiding fields |
 | `20260520174259_add_performance_indexes` | 10 performance indexes |
+| `20260915235229_user_invitations_and_password_tokens` | Invitation/activation/reset tokens, nullable `password`, e-mail normalization with an **automatic abort on collision** — see [`docs/migrations-and-seeds.md`](docs/migrations-and-seeds.md) |
+
+> Full deploy/seed procedure, including how to validate a migration against a
+> disposable database and the seed scripts' required environment variables:
+> [`docs/migrations-and-seeds.md`](docs/migrations-and-seeds.md).
 
 ---
 
@@ -494,13 +535,13 @@ npm run lint          # ESLint
 cd frontend && npm run test
 ```
 
-- **183 tests** across 25 suites (183/183 passing)
+- **443 tests** across 52 suites (443/443 passing)
 - Pattern: `vi.mock` + `setupMocks()` + `renderPage()`
 - Coverage: all feature components, hooks, utils, and helpers
 
 ```
 src/tests/
-├── auth/
+├── auth/               # login, invitation/activation/reset/change-password, session races
 ├── calendar/          # CalendarPage + eventUrgency + calendarHelpers
 ├── customers/
 ├── dashboard/
@@ -511,18 +552,23 @@ src/tests/
 ├── inventory/
 ├── layout/
 ├── payments/
-└── rentals/
+├── rentals/
+├── schemas/            # Zod schema unit tests
+├── stores/             # auth/theme store unit tests
+├── users/               # admin user management area
+└── bundle/             # public critical-path bundle guard
 ```
 
 ### Backend — Jest
 
 ```bash
-cd backend && npm run test
+cd backend && npm run test              # 437 unit tests
+cd backend && npm run test:e2e          # 36 end-to-end tests
 ```
 
-- **215 tests** across 11 suites (215/215 passing)
+- **437 unit tests** across 24 suites (437/437 passing) + **36 e2e tests** across 2 suites (36/36 passing)
 - Unit tests with PrismaService and dependency mocks
-- Coverage: all services, guards, and controllers
+- Coverage: all services, guards, and controllers, plus the users/auth/hashing/mail modules added in `feat/users-password-management`
 
 ```
 src/modules/
@@ -547,7 +593,8 @@ src/modules/
 
 ```
 POST /auth/login
-  → validates credentials
+  → validates credentials (Argon2id; transparently migrates a legacy
+    bcrypt hash to Argon2id on a successful login)
   → returns accessToken (15min) + refreshToken (7d)
 
 POST /auth/refresh
@@ -555,13 +602,19 @@ POST /auth/refresh
   → returns new token pair (rotation)
 
 POST /auth/logout
-  → revokes refreshToken
+  → revokes refreshToken (best-effort; exact-token match — see backlog
+    in docs/security-checklist-deploy.md)
 
 Axios interceptor (frontend)
   → injects accessToken in Authorization header
   → on 401, attempts automatic refresh
   → if refresh fails, redirects to /login
 ```
+
+Account lifecycle beyond login — invitation, activation, forgot/reset
+password, authenticated password change (`/account/security`), token
+lifetimes and storage, and the Argon2id/pepper design — is documented in full
+in [`docs/authentication-rbac.md`](docs/authentication-rbac.md).
 
 ### Roles and Permissions
 
@@ -576,6 +629,13 @@ Axios interceptor (frontend)
 | Financial | ✅ | ❌ | ✅ |
 | Documents | ✅ | ✅ | ✅ |
 | Calendar | ✅ | ✅ | ❌ |
+| Users (`/users`) | ✅ CRUD + invite | ❌ | ❌ |
+| Account security (`/account/security`, change own password) | ✅ | ✅ | ✅ |
+
+The frontend's role guard is UX only — every guarded endpoint independently
+enforces the same rule server-side (`@Roles`/`RolesGuard`), and `/users/*`
+never grants an admin-only capability the API would not already refuse to a
+non-admin caller.
 
 ---
 
@@ -715,20 +775,23 @@ const itemMap = new Map(items.map(i => [i.id, i]))
 | Layer | Mechanism |
 |---|---|
 | Transport | Helmet (secure HTTP headers: CSP, HSTS, X-Frame, X-Content-Type) |
-| Authentication | JWT with refresh rotation, bcrypt password hashing |
+| Authentication | JWT with refresh rotation; Argon2id password hashing (`m=65536, t=3, p=1`) with an HMAC-SHA-256 pepper — legacy bcrypt hashes are still *verified*, never newly created, and migrate transparently to Argon2id on a successful login |
 | Authorization | NestJS role guards on all endpoints |
 | Input validation | `class-validator` on DTOs (backend) + Zod on forms (frontend) |
 | CORS | Explicit origin allowlist (`FRONTEND_URL`) — unknown origins blocked |
-| Rate limiting | Login: 10/min · Refresh: 15/min · Global: 100/min |
+| Rate limiting | Login: 10/min · Refresh: 15/min · Password reset request: 5/15min · Reset/change-password/activation: 10/15min each · Global: 100/min |
 | Audit log | All mutations logged with userId, entity, payload, and IP |
 | Token cleanup | Expired and revoked refresh tokens purged on every login |
+| Action tokens | Invitation/reset tokens stored only as a SHA-256 digest, single-use (atomic conditional update), short TTL (30min reset / 24h invitation), delivered via a URL fragment that never reaches a server log |
 
 ### Additional Protections
 
-- **Frontend**: routes protected with `ProtectedRoute` and `RoleGuard`; `ReactQueryDevtools` disabled in production
-- **Backend**: guards validate JWT and role before any handler runs; filesystem paths never exposed in API responses; auth error messages are generic to prevent enumeration
-- **Database**: queries use server-generated UUIDs; filesystem paths never returned in responses
-- **Startup validation**: app refuses to start in `NODE_ENV=production` if JWT secrets are absent or contain weak placeholder values
+- **Frontend**: routes protected with `ProtectedRoute` and `RoleGuard`; `ReactQueryDevtools` disabled in production; no action token, password, or session data is ever written to `localStorage`/`sessionStorage`
+- **Backend**: guards validate JWT and role before any handler runs; filesystem paths never exposed in API responses; auth error messages are generic to prevent enumeration; a login/reset timing-mitigation (dummy Argon2id verification) keeps response time uniform whether or not an account exists
+- **Database**: queries use server-generated UUIDs; filesystem paths never returned in responses; user API responses use an explicit Prisma `select` allowlist that structurally excludes `password`
+- **Startup validation**: app refuses to start in `NODE_ENV=production` if `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` or `PASSWORD_PEPPER` are absent, too short, or contain weak placeholder values, or if `MAIL_DRIVER` is not `smtp` with a complete SMTP configuration
+
+Full design (hashing parameters, pepper rotation strategy, token lifecycle, RBAC route table): [`docs/authentication-rbac.md`](docs/authentication-rbac.md). Known, deliberately-not-yet-fixed limitations are tracked and classified in the backlog at the end of [`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md).
 
 ### Deploy Security Checklist
 
@@ -749,6 +812,26 @@ Before every production deploy, follow the checklist at [`docs/security-checklis
 | Domain / SSL | Free subdomains from each platform | Free |
 
 > For production with consistent uptime, upgrade to Railway (~$5/month for backend + DB) and keep Vercel free for the frontend.
+
+### Mandatory deploy order
+
+Each step below depends on the previous one completing successfully — never
+reorder them, even under time pressure. Full checklist, including the exact
+preflight query and the complete smoke test list: [`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md).
+
+1. **Backup** the production database, with the restore itself verified.
+2. **Preflight** for duplicate normalized e-mails, if this is the first
+   deploy of migration `20260915235229_user_invitations_and_password_tokens`
+   — the migration aborts on collision by itself, but check first anyway.
+3. **Configure environment variables** for the new version (below).
+4. **Run the migration** (`npx prisma migrate deploy`) — always before the
+   new backend version receives traffic, while the *old* backend version is
+   still serving requests.
+5. **Deploy the backend.**
+6. **Deploy the frontend** — only after the new backend is already responding.
+7. **Smoke tests** (below) against the live environment.
+8. **Monitoring** — confirm logs/alerts/uptime checks are receiving data from
+   the new version before calling the deploy done.
 
 ### Deploy steps
 
@@ -776,11 +859,28 @@ JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 PORT=3003
 FRONTEND_URL=https://your-app.vercel.app
+
+# Password hashing pepper — REQUIRED, app refuses to start without it
+PASSWORD_PEPPER=<openssl rand -base64 48>
+
+# Mail — MUST be "smtp" in production (the app refuses to start with "fake")
+MAIL_DRIVER=smtp
+SMTP_HOST=<your-smtp-host>
+SMTP_PORT=587
+SMTP_USER=<smtp-user>
+SMTP_PASSWORD=<smtp-password>
+SMTP_FROM=no-reply@your-domain.com
 ```
 
-After first deploy, run migrations via Render shell:
+Run the migration **before** this version starts serving traffic (see
+"Mandatory deploy order" above):
 ```bash
 npx prisma migrate deploy
+```
+
+First deploy only, to bootstrap the admin account:
+```bash
+SEED_ADMIN_PASSWORD=<openssl rand -base64 24> npx ts-node prisma/seed.ts
 ```
 
 #### 3. Frontend — Vercel
@@ -807,7 +907,9 @@ VITE_API_URL=https://your-api.onrender.com/api/v1
 
 ### Production smoke test
 
-After deploy, verify the golden path:
+After deploy, verify the golden path plus every auth/user-management flow
+this feature added. Full checklist with expected results:
+[`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md) (section "7-A. Smoke tests pós-deploy").
 
 ```
 1. Open https://your-app.vercel.app
@@ -817,6 +919,18 @@ After deploy, verify the golden path:
 5. Register a payment
 6. Download the generated PDF receipt
 7. Check the dashboard for updated KPIs
+
+Auth / user management (see the linked checklist for detail):
+ 8. Legacy bcrypt login + transparent rehash to Argon2id (if a legacy account exists)
+ 9. Create and activate a new user by invitation
+10. Password recovery (forgot → reset)
+11. Authenticated password change (/account/security) — confirms the session ends
+12. Session revocation — an access token issued before a password change is rejected
+13. Deactivate a user — an already-open session for that user loses access immediately
+14. RBAC — a non-admin gets 403 on a /users endpoint; /account/security works for all three roles
+15. SMTP delivery — confirm with the mail provider's own logs, not just the app's
+16. Public pages (/activate-account, /forgot-password, /reset-password) load without a session
+17. Confirm the deployed frontend build went through `npm run build` (bundle guard), not a bare `vite build`
 ```
 
 ---

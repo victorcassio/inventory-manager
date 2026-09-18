@@ -83,11 +83,19 @@ Projetado para empresas que trabalham com aluguel de andaimes, ferramentas, gera
 
 - Login com e-mail e senha, JWT com refresh token rotativo
 - 3 perfis de acesso com permissões granulares:
-  - **Admin** — acesso total
+  - **Admin** — acesso total, mais gestão de usuários (`/users`)
   - **Atendente** — operações de locação, devolução, estoque e documentos
   - **Financeiro** — dashboard, pagamentos, lançamentos financeiros e documentos
 - Guards em todos os endpoints sensíveis do backend
 - Proteção de rotas no frontend com redirect automático
+- Onboarding de usuários por convite por e-mail (`atendente`/`financeiro`),
+  ativação de conta, recuperação de senha self-service e uma tela de troca de
+  senha autenticada (`/account/security`) aberta às três roles
+- Hash de senha com Argon2id e pepper server-side (HMAC-SHA-256), com
+  migração transparente e progressiva dos hashes bcrypt legados — ver
+  [`docs/authentication-rbac.md`](docs/authentication-rbac.md) para o desenho
+  completo e [`docs/migrations-and-seeds.md`](docs/migrations-and-seeds.md)
+  para a migration que introduziu isso
 
 ### Dashboard
 
@@ -330,7 +338,7 @@ npm install
 
 # Copiar e configurar variáveis de ambiente
 cp .env.example .env
-# editar DATABASE_URL, JWT_SECRET, etc.
+# editar DATABASE_URL, JWT_ACCESS_SECRET, PASSWORD_PEPPER, etc.
 
 # Aplicar migrations
 npx prisma migrate dev
@@ -372,20 +380,49 @@ npm run dev
 
 ### Backend (`backend/.env`)
 
+Ver [`backend/.env.example`](backend/.env.example) para a lista definitiva.
+Nenhuma credencial real deve estar nos valores de exemplo abaixo nem neste
+README — todo placeholder é apenas ilustrativo.
+
 ```env
 # Banco de dados
 DATABASE_URL="postgresql://inventory_user:inventory_pass_dev@localhost:5440/inventory_db"
 
 # JWT
-JWT_SECRET="sua-chave-secreta-aqui"
-JWT_EXPIRES_IN="15m"
-JWT_REFRESH_SECRET="sua-chave-refresh-aqui"
+JWT_ACCESS_SECRET="min-32-chars-troque-em-producao"
+JWT_REFRESH_SECRET="chave-diferente-min-32-chars-troque-em-producao"
+JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 
 # App
 PORT=3003
+NODE_ENV=development
 FRONTEND_URL="http://localhost:5173"
+
+# Hashing de senha — gerar com: openssl rand -base64 48
+# Obrigatória. A aplicação recusa iniciar sem ela. Ver docs/authentication-rbac.md.
+PASSWORD_PEPPER=
+
+# Mail — "fake" só loga (dev/teste); produção exige "smtp" e recusa iniciar sem ele
+MAIL_DRIVER=fake
+SMTP_HOST=
+SMTP_PORT=
+SMTP_SECURE=
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+
+# Senha de bootstrap pontual para prisma/seed.ts — nunca commitar um valor real
+SEED_ADMIN_PASSWORD=
 ```
+
+> Com `NODE_ENV=production`, a aplicação recusa iniciar se `PASSWORD_PEPPER`,
+> `JWT_ACCESS_SECRET` ou `JWT_REFRESH_SECRET` estiverem ausentes, curtos
+> demais, ou parecerem um placeholder (`secret`, `test`, `example`,
+> `changeme`), ou se `MAIL_DRIVER` for diferente de `smtp` com a configuração
+> SMTP completa. Detalhes completos:
+> [`docs/authentication-rbac.md`](docs/authentication-rbac.md) e
+> [`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md).
 
 ### Frontend (`frontend/.env`)
 
@@ -453,6 +490,11 @@ npx prisma migrate reset --force
 | `20260515150000_add_payment_id_to_financial_transaction` | Associação pagamento → lançamento |
 | `20260515151000_add_void_fields_to_financial_transaction` | Campos de anulação de lançamento |
 | `20260520174259_add_performance_indexes` | 10 índices de performance |
+| `20260915235229_user_invitations_and_password_tokens` | Tokens de convite/ativação/reset, `password` opcional, normalização de e-mail com **abort automático em colisão** — ver [`docs/migrations-and-seeds.md`](docs/migrations-and-seeds.md) |
+
+> Procedimento completo de deploy/seed, incluindo como validar uma migration
+> num banco descartável e as variáveis exigidas pelos scripts de seed:
+> [`docs/migrations-and-seeds.md`](docs/migrations-and-seeds.md).
 
 ---
 
@@ -494,13 +536,13 @@ npm run lint          # ESLint
 cd frontend && npm run test
 ```
 
-- **183 testes** em 25 suites (183/183 passando)
+- **443 testes** em 52 suites (443/443 passando)
 - Padrão: `vi.mock` + `setupMocks()` + `renderPage()`
 - Cobertura: todos os componentes de feature, hooks, utils e helpers
 
 ```
 src/tests/
-├── auth/
+├── auth/               # login, convite/ativação/reset/troca de senha, corridas de sessão
 ├── calendar/          # CalendarPage + eventUrgency + calendarHelpers
 ├── customers/
 ├── dashboard/
@@ -511,18 +553,23 @@ src/tests/
 ├── inventory/
 ├── layout/
 ├── payments/
-└── rentals/
+├── rentals/
+├── schemas/            # testes unitários dos schemas Zod
+├── stores/             # testes unitários dos stores auth/theme
+├── users/               # área admin de gestão de usuários
+└── bundle/             # guarda do caminho crítico público do bundle
 ```
 
 ### Backend — Jest
 
 ```bash
-cd backend && npm run test
+cd backend && npm run test              # 437 testes unitários
+cd backend && npm run test:e2e          # 36 testes end-to-end
 ```
 
-- **215 testes** em 11 suites (215/215 passando)
+- **437 testes unitários** em 24 suites (437/437 passando) + **36 testes e2e** em 2 suites (36/36 passando)
 - Testes unitários com mocks do PrismaService e dependências
-- Cobertura: todos os services, guards e controllers
+- Cobertura: todos os services, guards e controllers, incluindo os módulos de usuários/auth/hashing/mail adicionados em `feat/users-password-management`
 
 ```
 src/modules/
@@ -547,7 +594,8 @@ src/modules/
 
 ```
 POST /auth/login
-  → valida credenciais
+  → valida credenciais (Argon2id; migra transparentemente um hash bcrypt
+    legado para Argon2id em um login bem-sucedido)
   → retorna accessToken (15min) + refreshToken (7d)
 
 POST /auth/refresh
@@ -555,13 +603,19 @@ POST /auth/refresh
   → retorna novo par de tokens (rotação)
 
 POST /auth/logout
-  → revoga refreshToken
+  → revoga refreshToken (best-effort; correspondência exata de token —
+    ver backlog em docs/security-checklist-deploy.md)
 
 Axios interceptor (frontend)
   → injeta accessToken no header Authorization
   → em 401, tenta refresh automático
   → se refresh falhar, redireciona para /login
 ```
+
+O ciclo de vida da conta além do login — convite, ativação, esqueci/redefinir
+senha, troca de senha autenticada (`/account/security`), TTL e armazenamento
+de tokens, e o desenho Argon2id/pepper — está documentado por completo em
+[`docs/authentication-rbac.md`](docs/authentication-rbac.md).
 
 ### Papéis e permissões
 
@@ -576,6 +630,13 @@ Axios interceptor (frontend)
 | Financeiro | ✅ | ❌ | ✅ |
 | Documentos | ✅ | ✅ | ✅ |
 | Calendário | ✅ | ✅ | ❌ |
+| Usuários (`/users`) | ✅ CRUD + convite | ❌ | ❌ |
+| Segurança da conta (`/account/security`, trocar a própria senha) | ✅ | ✅ | ✅ |
+
+O guard de role no frontend é só UX — todo endpoint protegido também é
+verificado de forma independente no backend (`@Roles`/`RolesGuard`), e
+`/users/*` nunca concede uma capacidade admin-only que a API já não recusaria
+a um chamador não-admin.
 
 ---
 
@@ -715,20 +776,23 @@ const itemMap = new Map(items.map(i => [i.id, i]))
 | Camada | Mecanismo |
 |---|---|
 | Transporte | Helmet (headers HTTP seguros: CSP, HSTS, X-Frame, X-Content-Type) |
-| Autenticação | JWT com refresh rotation, bcrypt no hash de senha |
+| Autenticação | JWT com refresh rotation; hash de senha Argon2id (`m=65536, t=3, p=1`) com pepper HMAC-SHA-256 — hashes bcrypt legados ainda são *verificados*, nunca criados de novo, e migram transparentemente para Argon2id no próximo login bem-sucedido |
 | Autorização | Guards NestJS por role em todos os endpoints |
 | Validação de entrada | `class-validator` nos DTOs (backend) + Zod nos forms (frontend) |
 | CORS | Allowlist explícita de origens (`FRONTEND_URL`) — origins desconhecidas bloqueadas |
-| Rate limiting | Login: 10/min · Refresh: 15/min · Global: 100/min |
+| Rate limiting | Login: 10/min · Refresh: 15/min · Solicitação de reset: 5/15min · Reset/troca de senha/ativação: 10/15min cada · Global: 100/min |
 | Audit log | Registro de todas as mutações com userId, entity, payload, IP |
 | Limpeza de tokens | Refresh tokens expirados e revogados removidos a cada login |
+| Tokens de ação | Tokens de convite/reset armazenados só como digest SHA-256, uso único (update condicional atômico), TTL curto (30min reset / 24h convite), entregues por fragmento de URL que nunca chega a um log de servidor |
 
 ### Proteção por profundidade
 
-- **Frontend**: rotas protegidas com `ProtectedRoute` e `RoleGuard`; `ReactQueryDevtools` desabilitado em produção
-- **Backend**: guards validam JWT e role antes de qualquer handler; paths de filesystem nunca expostos nos responses; mensagens de erro de auth são genéricas para evitar enumeração
-- **Banco**: queries usam UUIDs gerados pelo servidor; paths nunca retornados nos responses
-- **Validação na startup**: a aplicação recusa iniciar em `NODE_ENV=production` se os JWT secrets estiverem ausentes ou contiverem valores fracos
+- **Frontend**: rotas protegidas com `ProtectedRoute` e `RoleGuard`; `ReactQueryDevtools` desabilitado em produção; nenhum token de ação, senha ou dado de sessão é gravado em `localStorage`/`sessionStorage`
+- **Backend**: guards validam JWT e role antes de qualquer handler; paths de filesystem nunca expostos nos responses; mensagens de erro de auth são genéricas para evitar enumeração; uma mitigação de timing (verificação contra um hash Argon2id descartável) mantém o tempo de resposta uniforme entre uma conta que existe e uma que não existe
+- **Banco**: queries usam UUIDs gerados pelo servidor; paths nunca retornados nos responses; respostas de usuário usam uma allowlist explícita (`select` do Prisma) que exclui estruturalmente `password`
+- **Validação na startup**: a aplicação recusa iniciar em `NODE_ENV=production` se `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` ou `PASSWORD_PEPPER` estiverem ausentes, curtos demais ou contiverem valores fracos, ou se `MAIL_DRIVER` for diferente de `smtp` com a configuração SMTP completa
+
+Desenho completo (parâmetros de hashing, estratégia de rotação de pepper, ciclo de vida dos tokens, tabela de rotas RBAC): [`docs/authentication-rbac.md`](docs/authentication-rbac.md). Limitações conhecidas e deliberadamente não corrigidas ainda estão classificadas no backlog ao final de [`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md).
 
 ### Checklist de segurança para deploy
 
@@ -749,6 +813,27 @@ Antes de cada deploy em produção, siga o checklist em [`docs/security-checklis
 | Domínio / SSL | Subdomínios gratuitos de cada plataforma | Grátis |
 
 > Para produção com uptime estável, usar Railway (~R$ 25/mês para backend + banco) e manter Vercel grátis no frontend.
+
+### Ordem obrigatória de deploy
+
+Cada etapa depende da anterior ter sido concluída com sucesso — nunca
+reordene, mesmo sob pressão de tempo. Checklist completo, com a query exata
+de preflight e a lista completa de smoke tests:
+[`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md).
+
+1. **Backup** do banco de produção, com o restore verificado de verdade.
+2. **Preflight** de e-mails normalizados duplicados, se este for o primeiro
+   deploy da migration `20260915235229_user_invitations_and_password_tokens`
+   — ela mesma aborta em caso de colisão, mas confira antes de qualquer forma.
+3. **Configurar as variáveis de ambiente** da nova versão (abaixo).
+4. **Rodar a migration** (`npx prisma migrate deploy`) — sempre antes de a
+   nova versão do backend receber tráfego, enquanto a versão *antiga* ainda
+   está no ar.
+5. **Deploy do backend.**
+6. **Deploy do frontend** — só depois de o backend novo já estar respondendo.
+7. **Smoke tests** (abaixo) contra o ambiente no ar.
+8. **Monitoramento** — confirmar que logs/alertas/uptime monitor estão
+   recebendo dados da nova versão antes de considerar o deploy concluído.
 
 ### Passos de deploy
 
@@ -776,11 +861,28 @@ JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 PORT=3003
 FRONTEND_URL=https://seu-app.vercel.app
+
+# Pepper de hashing de senha — OBRIGATÓRIO, a aplicação recusa iniciar sem ele
+PASSWORD_PEPPER=<openssl rand -base64 48>
+
+# Mail — DEVE ser "smtp" em produção (a aplicação recusa iniciar com "fake")
+MAIL_DRIVER=smtp
+SMTP_HOST=<seu-host-smtp>
+SMTP_PORT=587
+SMTP_USER=<usuario-smtp>
+SMTP_PASSWORD=<senha-smtp>
+SMTP_FROM=no-reply@seu-dominio.com
 ```
 
-Após o primeiro deploy, executar migrations via shell do Render:
+Rodar a migration **antes** de esta versão começar a servir tráfego (ver
+"Ordem obrigatória de deploy" acima):
 ```bash
 npx prisma migrate deploy
+```
+
+Só no primeiro deploy, para inicializar a conta admin:
+```bash
+SEED_ADMIN_PASSWORD=<openssl rand -base64 24> npx ts-node prisma/seed.ts
 ```
 
 #### 3. Frontend — Vercel
@@ -805,7 +907,9 @@ VITE_API_URL=https://sua-api.onrender.com/api/v1
 
 ### Smoke test de produção
 
-Após o deploy, verificar o fluxo principal:
+Após o deploy, verificar o fluxo principal mais todos os fluxos de auth/gestão
+de usuários desta feature. Checklist completo com resultados esperados:
+[`docs/security-checklist-deploy.md`](docs/security-checklist-deploy.md) (seção "7-A. Smoke tests pós-deploy").
 
 ```
 1. Abrir https://seu-app.vercel.app
@@ -815,6 +919,18 @@ Após o deploy, verificar o fluxo principal:
 5. Registrar um pagamento
 6. Baixar o PDF do recibo gerado
 7. Verificar o dashboard com os KPIs atualizados
+
+Auth / gestão de usuários (ver o checklist linkado para o detalhe):
+ 8. Login legado bcrypt + rehash transparente para Argon2id (se existir uma conta legada)
+ 9. Criar e ativar um usuário por convite
+10. Recuperação de senha (esqueci → redefinir)
+11. Troca de senha autenticada (/account/security) — confirma que a sessão é encerrada
+12. Revogação de sessão — um access token emitido antes da troca é rejeitado
+13. Desativar um usuário — uma sessão já aberta dessa conta perde acesso imediatamente
+14. RBAC — uma conta não-admin recebe 403 num endpoint de /users; /account/security funciona para as três roles
+15. Entrega SMTP — confirmar pelos próprios logs do provedor de e-mail, não só pelos da aplicação
+16. Páginas públicas (/activate-account, /forgot-password, /reset-password) carregam sem sessão
+17. Confirmar que o build do frontend implantado passou por `npm run build` (guarda de bundle), nunca um `vite build` isolado
 ```
 
 ---

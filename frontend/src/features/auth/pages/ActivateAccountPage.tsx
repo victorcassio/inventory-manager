@@ -18,14 +18,16 @@ export function ActivateAccountPage() {
       token={token}
       onSubmit={authApi.activateAccount}
       onSuccess={() => {
-        // Whatever session this browser was holding is dead: a reset revokes
-        // every refresh row and moves passwordChangedAt, which kills the
-        // access tokens too. Clearing locally means we do not admit the user
-        // to the app shell on stale credentials, and do not leave those
-        // credentials and their user object sitting in localStorage on what
-        // may be a shared machine — right after the action someone performs
-        // precisely because they think they were compromised. Idempotent when
-        // there was no session.
+        // Activation itself revokes nothing server-side — it only sets a
+        // password on an account that never had a session. This clears
+        // whatever UNRELATED session this browser happened to be holding
+        // (e.g. someone else's, on a shared machine) purely as a local
+        // precaution, so the person who just proved they hold this invite
+        // link is never silently admitted to a stranger's already-open app
+        // shell. It does not revoke that other session's refresh token
+        // remotely — see the backlog note on clearAuth() and shared devices
+        // in docs/security-checklist-deploy.md. Idempotent when there was no
+        // session to begin with.
         useAuthStore.getState().clearAuth()
         toast.success('Senha definida. Faça login para continuar.')
         // Deliberately no auto-login: activation returns no tokens, and the
