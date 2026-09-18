@@ -89,6 +89,9 @@ const UserEditPage = lazy(() =>
 const DocumentsListPage = lazy(() =>
   import('@/features/documents/pages/DocumentsListPage').then((m) => ({ default: m.DocumentsListPage }))
 )
+const AccountSecurityPage = lazy(() =>
+  import('@/features/auth/pages/AccountSecurityPage').then((m) => ({ default: m.AccountSecurityPage }))
+)
 const CalendarPage = lazy(() =>
   import('@/features/calendar/pages/CalendarPage').then((m) => ({ default: m.CalendarPage }))
 )
@@ -129,6 +132,10 @@ export function AppRoutes() {
             <Route path="/payments" element={<PaymentsListPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/documents" element={<DocumentsListPage />} />
+            {/* Every authenticated role, deliberately outside the admin
+                RoleGuard below: this is each person's own account, not the
+                /users management area. */}
+            <Route path="/account/security" element={<AccountSecurityPage />} />
             <Route path="/financial" element={<Navigate to="/financial/transactions" replace />} />
             <Route path="/financial/transactions" element={<FinancialListPage />} />
             <Route path="/financial/transactions/new" element={<FinancialNewPage />} />

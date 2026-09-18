@@ -65,11 +65,61 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = []
 }
 
+/**
+ * Resolves once whatever refresh is currently running settles — success or
+ * failure, this module does not care which. `null` while nothing is running,
+ * so callers can await unconditionally.
+ *
+ * This exists for exactly one caller: a flow that is about to end the session
+ * (logout, or cleanup after a password change) and needs to know the CURRENT
+ * refresh token, not a stale one it read before an in-flight rotation
+ * finished. Without it, ending a session while a refresh is mid-flight races:
+ * the token this flow captured before waiting may already have been revoked
+ * server-side by the rotation that completes moments later, and the token
+ * that rotation minted — genuinely live, unrevoked — is the one that actually
+ * needed ending.
+ */
+let pendingRefresh: Promise<void> | null = null
+
+export function waitForPendingRefresh(): Promise<void> {
+  return pendingRefresh ?? Promise.resolve()
+}
+
+/**
+ * True once a caller has committed to ending the session. Checked at the top
+ * of the 401 handler: a session that is already ending must not spend its
+ * last moments minting a fresh, live token pair that the ending flow does not
+ * know to revoke. It is not enough on its own — it stops a NEW refresh from
+ * starting, but says nothing about one already running, which is what
+ * waitForPendingRefresh is for.
+ */
+let sessionEnding = false
+
+export function beginEndingSession() {
+  sessionEnding = true
+}
+
+/**
+ * A newer login reaching setAuth() always calls this: sessionEnding is
+ * module-wide, not tied to any one session, so a fresh session must not
+ * inherit a flag some earlier, unrelated logout attempt set.
+ */
+export function allowRefreshAgain() {
+  sessionEnding = false
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
     if (error.response?.status !== 401 || originalRequest._retry) return Promise.reject(error)
+
+    // The session is already on its way out. Minting a fresh, live pair here
+    // would hand a flow that is trying to END the session a token it has no
+    // reason to know about — the exact orphaned-token shape logout closes
+    // below. Reject as-is; whatever asked for this request is about to be
+    // torn down along with the session.
+    if (sessionEnding) return Promise.reject(error)
 
     if (isRefreshing) {
       // Marked before queueing: if this request 401s again after being retried
@@ -86,6 +136,10 @@ api.interceptors.response.use(
 
     originalRequest._retry = true
     isRefreshing = true
+    let resolvePendingRefresh: () => void = () => {}
+    pendingRefresh = new Promise((resolve) => {
+      resolvePendingRefresh = resolve
+    })
 
     // Captured OUTSIDE the try: the catch below compares against it to decide
     // whether this failure still belongs to the current session, so it has to
@@ -167,6 +221,8 @@ api.interceptors.response.use(
       return Promise.reject(failure)
     } finally {
       isRefreshing = false
+      resolvePendingRefresh()
+      pendingRefresh = null
     }
   },
 )

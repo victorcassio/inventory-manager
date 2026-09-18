@@ -1,13 +1,13 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Package, FileText, CreditCard,
-  TrendingUp, LogOut, ClipboardList, Calendar, UserCog,
+  TrendingUp, LogOut, ClipboardList, Calendar, UserCog, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useAuthStore } from '@/stores/auth.store'
-import { authApi } from '@/lib/api/auth.api'
+import { endSession } from '@/features/auth/lib/endSession'
 import type { UserRole } from '@/types'
 
 interface NavItem {
@@ -27,6 +27,9 @@ const navItems: NavItem[] = [
   { label: 'Financeiro',   href: '/financial',                  icon: TrendingUp,      roles: ['admin', 'financial'] },
   { label: 'Documentos',   href: '/documents',                  icon: FileText,        roles: ['admin', 'attendant', 'financial'] },
   { label: 'Usuários',     href: '/users',                       icon: UserCog,         roles: ['admin'] },
+  // Every authenticated role, deliberately not gated by the /users admin
+  // permission — this is each person's own account, not user management.
+  { label: 'Segurança',    href: '/account/security',           icon: ShieldCheck,     roles: ['admin', 'attendant', 'financial'] },
 ]
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -40,19 +43,14 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onClose }: SidebarProps) {
-  const { user, clearAuth } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
 
   const handleLogout = async () => {
-    const { refreshToken } = useAuthStore.getState()
-    try {
-      if (refreshToken) await authApi.logout(refreshToken)
-    } catch {
-      // ignore
-    } finally {
-      clearAuth()
-      navigate('/login', { replace: true })
-    }
+    // Only navigate away if this call actually ended the session: see
+    // endSession's own doc comment for why that can be false.
+    const ended = await endSession()
+    if (ended) navigate('/login', { replace: true })
   }
 
   const filteredItems = navItems.filter(item =>

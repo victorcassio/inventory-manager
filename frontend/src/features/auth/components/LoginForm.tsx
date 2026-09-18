@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,9 +17,26 @@ import {
 import { loginSchema, type LoginFormValues } from '@/schemas/auth.schema'
 import { useAuth } from '../hooks/useAuth'
 
+/**
+ * Fixed, non-sensitive strings only. AccountSecurityPage passes a bare
+ * indicator through navigation state rather than a toast — a toast tied to
+ * the page it fired from can be unmounted before it renders, and this way the
+ * message is guaranteed to show exactly where the user lands, not wherever
+ * they happened to be a moment before the redirect.
+ */
+const SECURITY_NOTICES: Record<string, string> = {
+  'password-changed': 'Senha alterada. Faça login novamente.',
+  'session-expired': 'Sua sessão expirou. Faça login novamente.',
+}
+
 export function LoginForm() {
   const { login } = useAuth()
+  const location = useLocation()
   const [apiError, setApiError] = useState<string | null>(null)
+  const securityNotice =
+    typeof (location.state as { securityNotice?: unknown })?.securityNotice === 'string'
+      ? SECURITY_NOTICES[(location.state as { securityNotice: string }).securityNotice]
+      : undefined
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -46,6 +63,11 @@ export function LoginForm() {
         <CardTitle>Entrar</CardTitle>
       </CardHeader>
       <CardContent>
+        {securityNotice && (
+          <p role="status" className="mb-4 rounded-md bg-muted p-3 text-sm text-muted-foreground">
+            {securityNotice}
+          </p>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { User } from '@/types'
-import { setTokens, clearTokens } from '@/lib/api/client'
+import { setTokens, clearTokens, allowRefreshAgain } from '@/lib/api/client'
 
 /** Persisted-shape version. Bump it when the stored user gains a field. */
 export const AUTH_PERSIST_VERSION = 1
@@ -40,6 +40,11 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       setAuth: (user, accessToken, refreshToken) => {
         setTokens(accessToken, refreshToken)
+        // sessionEnding is module-wide in client.ts, not tied to any one
+        // session — an earlier logout attempt (possibly still finishing its
+        // own network call) must not leave a BRAND NEW session unable to
+        // refresh.
+        allowRefreshAgain()
         set({ user, accessToken, refreshToken, isAuthenticated: true })
       },
       updateTokens: (accessToken, refreshToken) => {
