@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Users as UsersIcon, CheckCircle2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -62,12 +62,20 @@ export function UsersListPage() {
   }
 
   const handleClearFilters = () => {
+    // A search typed just before this click has a timer in flight; without
+    // cancelling it, it fires ~300ms later and reinstates the very filter
+    // this button just cleared.
+    clearTimeout(debounceRef.current)
     setSearchInput('')
     setSearch('')
     setRole('')
     setStatus('')
     reset()
   }
+
+  useEffect(() => {
+    return () => clearTimeout(debounceRef.current)
+  }, [])
 
   const { data, isLoading, isError, refetch } = useUsersList({
     page,
@@ -136,15 +144,36 @@ export function UsersListPage() {
       </FilterPanel>
 
       {activeCount > 0 && (
-        <div className="hidden md:flex">
+        <div className="hidden lg:flex">
           <Button variant="ghost" size="sm" onClick={handleClearFilters}>
             Limpar filtros
           </Button>
         </div>
       )}
 
+      {/* One persistent live region for the whole results area, rather than
+          the mount/unmount-per-state pattern the loading skeleton used to use
+          on its own: a role="status" node that appears already carrying its
+          final content is the exact case screen readers announce least
+          reliably, because it was never in the tree to compare against. This
+          node exists for the page's whole lifetime and only its text changes,
+          which is the reliable version of the same signal — and it is what a
+          screen-reader user gets in place of watching the table update after
+          typing a search term or changing a filter. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {isLoading
+          ? 'Carregando usuários'
+          : isError
+            ? ''
+            : data
+              ? data.data.length === 0
+                ? 'Nenhum usuário encontrado'
+                : `Mostrando ${(page - 1) * limit + 1} a ${Math.min(page * limit, data.total)} de ${data.total} usuários`
+              : ''}
+      </p>
+
       {isLoading && (
-        <div className="space-y-2" role="status" aria-label="Carregando usuários">
+        <div className="space-y-2" aria-hidden="true">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -172,8 +201,10 @@ export function UsersListPage() {
             />
           ) : (
             <>
-              {/* Desktop */}
-              <div className="hidden md:block">
+              {/* Desktop. lg, not md: at md (768px) the permanent sidebar (w-64)
+                  plus the page's own padding leave under 500px for these 8
+                  columns — not enough. */}
+              <div className="hidden lg:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -191,7 +222,9 @@ export function UsersListPage() {
                     {data.data.map((user) => (
                       <TableRow key={user.id}>
                         <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                        <TableCell className="max-w-[220px] truncate text-muted-foreground">
+                          {user.email}
+                        </TableCell>
                         <TableCell>{ROLE_LABELS[user.role]}</TableCell>
                         <TableCell>
                           <Badge variant={user.isActive ? 'default' : 'secondary'}>
@@ -226,8 +259,8 @@ export function UsersListPage() {
                 </Table>
               </div>
 
-              {/* Mobile */}
-              <div className="md:hidden space-y-3">
+              {/* Mobile — shown up to lg, matching the table's own cutoff above. */}
+              <div className="lg:hidden space-y-3">
                 {data.data.map((user) => (
                   <div key={user.id} className="rounded-md border p-4 space-y-3">
                     <div className="flex items-start justify-between gap-2">

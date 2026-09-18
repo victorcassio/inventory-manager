@@ -82,7 +82,12 @@ export function UserForm(props: UserFormProps | UserEditFormProps) {
             <FormItem>
               <FormLabel>Nome</FormLabel>
               <FormControl>
-                <Input autoComplete="name" disabled={busy} {...field} />
+                {/* No disabled={busy} here: disabling the field the user is
+                    focused in (e.g. after pressing Enter to submit) blurs it to
+                    <body>, losing their place. The inFlight guard in
+                    UserNewPage/UserEditPage already prevents a duplicate
+                    submit, so this has nothing left to protect against. */}
+                <Input autoComplete="name" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -97,7 +102,6 @@ export function UserForm(props: UserFormProps | UserEditFormProps) {
                 id="user-email-readonly"
                 value={props.user.email}
                 readOnly
-                disabled
                 aria-describedby="user-email-readonly-hint"
               />
             </FormControl>
@@ -113,7 +117,7 @@ export function UserForm(props: UserFormProps | UserEditFormProps) {
               <FormItem>
                 <FormLabel>E-mail</FormLabel>
                 <FormControl>
-                  <Input type="email" autoComplete="email" disabled={busy} {...field} />
+                  <Input type="email" autoComplete="email" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -127,9 +131,9 @@ export function UserForm(props: UserFormProps | UserEditFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Perfil</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={busy}>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger ref={field.ref}>
                     <SelectValue placeholder="Selecione um perfil" />
                   </SelectTrigger>
                 </FormControl>

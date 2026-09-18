@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { UserForm } from '@/features/users/components/UserForm'
 import { createUserSchema, updateUserSchema } from '@/schemas/user.schema'
@@ -77,6 +77,23 @@ describe('UserForm — create mode', () => {
     expect(screen.queryByRole('option', { name: /admin/i })).not.toBeInTheDocument()
   })
 
+  it('does not disable Nome/E-mail while submitting, so focus is never dropped to <body>', () => {
+    render(<UserForm mode="create" onSubmit={vi.fn()} submitting />)
+
+    // Disabling the field the user just submitted from (e.g. via Enter) blurs
+    // it to <body>, losing their place — the same bug an earlier task fixed
+    // for the submit button itself.
+    expect(screen.getByLabelText('Nome')).not.toBeDisabled()
+    expect(screen.getByLabelText('E-mail')).not.toBeDisabled()
+    expect(screen.getByRole('combobox', { name: /perfil/i })).not.toBeDisabled()
+    // The submit button still communicates busy state, just not via the
+    // native attribute that would blur it.
+    expect(screen.getByRole('button', { name: /salvando/i })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
   it('submits the entered values', async () => {
     const onSubmit = vi.fn()
     const user = userEvent.setup()
@@ -98,6 +115,26 @@ describe('UserForm — create mode', () => {
   })
 })
 
+describe('UserForm — focus management', () => {
+  it('focuses the role select when it is the only invalid field on submit', async () => {
+    const user = userEvent.setup()
+    render(<UserForm mode="create" onSubmit={vi.fn()} submitting={false} />)
+
+    // Nome/E-mail valid, role left unselected: the Select is the sole error.
+    await user.type(screen.getByLabelText('Nome'), 'Maria Nova')
+    await user.type(screen.getByLabelText('E-mail'), 'maria.nova@example.com')
+    await user.click(screen.getByRole('button', { name: /cadastrar usuário/i }))
+
+    // Without field.ref wired to SelectTrigger, React Hook Form has no DOM
+    // node to call .focus() on for this field, and shouldFocusError silently
+    // does nothing — the error text still appears, but nothing directs a
+    // keyboard or screen-reader user to it.
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: /perfil/i })).toHaveFocus(),
+    )
+  })
+})
+
 describe('UserForm — edit mode', () => {
   it('has no password field', () => {
     render(
@@ -115,8 +152,12 @@ describe('UserForm — edit mode', () => {
 
     const email = screen.getByLabelText('E-mail') as HTMLInputElement
     expect(email.value).toBe('carlos@example.com')
-    expect(email).toBeDisabled()
     expect(email).toHaveAttribute('readonly')
+    // Not disabled: a disabled field is removed from the tab order and, on
+    // several screen-reader/browser combinations, never has its value or its
+    // "cannot be changed" description announced at all. readOnly keeps it
+    // focusable and both are read, while still refusing edits.
+    expect(email).not.toBeDisabled()
   })
 
   it('does not send the e-mail field on submit, since it cannot change', async () => {

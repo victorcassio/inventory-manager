@@ -74,6 +74,19 @@ describe('UserEditPage', () => {
     expect(screen.getByLabelText('E-mail')).toHaveValue('carlos@example.com')
   })
 
+  it('shows an explanatory dead-end instead of the form when the target is an admin', async () => {
+    vi.mocked(usersApi.getById).mockResolvedValue(makeAdminUser({ role: 'admin' }))
+    renderPage()
+
+    // Row actions already hide "Editar" for admin rows, but nothing stops a
+    // direct URL visit to this route for an admin's id. The backend refuses
+    // the update regardless — this is what keeps the page from showing a
+    // role selector with no option matching the account's real role, wired
+    // to a submit that could never succeed.
+    expect(await screen.findByText('Esta conta não pode ser editada por aqui')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Nome')).not.toBeInTheDocument()
+  })
+
   it('saves changes and navigates back to the list', async () => {
     const user = userEvent.setup()
     vi.mocked(usersApi.update).mockResolvedValue(makeAdminUser({ name: 'Carlos Editado' }))

@@ -89,7 +89,7 @@ describe('UsersListPage', () => {
     setupMocks()
     const { container } = renderPage()
 
-    const mobileList = container.querySelector('.md\\:hidden.space-y-3')
+    const mobileList = container.querySelector('.lg\\:hidden.space-y-3')
     expect(mobileList).toBeTruthy()
     expect(mobileList?.textContent).toContain('Ana Atendente')
     expect(mobileList?.textContent).toContain('ana@example.com')
@@ -100,7 +100,7 @@ describe('UsersListPage', () => {
     mockUseUsersList.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
     renderPage()
 
-    expect(screen.getByRole('status', { name: /carregando usuários/i })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Carregando usuários')
   })
 
   it('shows an empty state with a call to action when there are no filters', () => {
@@ -113,8 +113,10 @@ describe('UsersListPage', () => {
     })
     renderPage()
 
-    expect(screen.getByText('Nenhum usuário encontrado')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Nenhum usuário encontrado' })).toBeInTheDocument()
     expect(screen.getByText('Cadastre o primeiro usuário para começar.')).toBeInTheDocument()
+    // The live region announces the same outcome for a screen-reader user.
+    expect(screen.getByRole('status')).toHaveTextContent('Nenhum usuário encontrado')
   })
 
   it('shows an error state with retry', async () => {
@@ -201,6 +203,32 @@ describe('UsersListPage', () => {
     )
   })
 
+  it('cancels a pending debounced search when filters are cleared', async () => {
+    setupMocks()
+    const user = userEvent.setup()
+    renderPage()
+
+    // Set a real filter too, so "Limpar filtros" is actually rendered.
+    await user.click(screen.getByLabelText('Filtrar por perfil'))
+    await user.click(await screen.findByRole('option', { name: 'Financeiro' }))
+    await waitFor(() =>
+      expect(mockUseUsersList).toHaveBeenLastCalledWith(expect.objectContaining({ role: 'financial' })),
+    )
+
+    // Type a search, then clear everything BEFORE the 300ms debounce fires.
+    await user.type(screen.getByLabelText('Buscar por nome ou e-mail'), 'maria')
+    const clearButtons = screen.getAllByRole('button', { name: /limpar filtros/i })
+    await user.click(clearButtons[0])
+
+    // Without cancelling the pending timer, it fires here and reinstates the
+    // search this click just cleared.
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    expect(mockUseUsersList).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: undefined, role: undefined }),
+    )
+  })
+
   it('shows pagination when total exceeds the page limit', () => {
     mockUseAuthStore.mockReturnValue({ user: { id: 'me-1', role: 'admin' } })
     mockUseUsersList.mockReturnValue({
@@ -247,7 +275,7 @@ describe('UsersListPage', () => {
     // jsdom (their visibility is CSS-only), so each real occurrence renders
     // twice. What matters is that it is the SAME user in both, and that the
     // accepted invitation never shows an expiry.
-    const desktopRows = container.querySelectorAll('.hidden.md\\:block tbody tr')
+    const desktopRows = container.querySelectorAll('.hidden.lg\\:block tbody tr')
     expect(desktopRows).toHaveLength(2)
     expect(desktopRows[0].textContent).toMatch(/expira em/i)
     expect(desktopRows[1].textContent).not.toMatch(/expira em/i)

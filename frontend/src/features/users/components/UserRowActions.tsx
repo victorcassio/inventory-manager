@@ -37,15 +37,26 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
   // re-render — the same same-tick window Task 17 found in the password
   // forms. The mutation's shared scope only serialises the two calls, it does
   // not drop the second one, so without this it would just send a delayed
-  // second invitation rather than none. Status and revoke go through
-  // ConfirmDialog first, which Radix closes after one click, so they do not
-  // need a second guard here.
+  // second invitation rather than none.
   const resendInFlight = useRef(false)
   const handleResend = () => {
     if (resendInFlight.current) return
     resendInFlight.current = true
     resend.mutate(user.id, { onSettled: () => { resendInFlight.current = false } })
   }
+
+  // Status and revoke go through ConfirmDialog, whose `confirmed` ref stops a
+  // click on Cancel/Escape from also firing onConfirm — but it does NOT stop
+  // two clicks on the CONFIRM button itself. AlertDialogContent carries a real
+  // exit animation (animate-out, duration-200), and Radix's Presence keeps the
+  // node mounted and clickable for that ~200ms while it plays — a fast second
+  // click in that window reaches this handler again before React ever unmounts
+  // the dialog. (jsdom fakes CSS as inert, so it unmounts synchronously on the
+  // first click there — a test built on that behaves as if this window doesn't
+  // exist. It does, in every real browser.) Guarding here the same way resend
+  // is guarded is what actually closes it.
+  const statusInFlight = useRef(false)
+  const revokeInFlight = useRef(false)
 
   const edit = canEdit(user)
   const statusChange = canChangeStatus(user, currentUserId)
@@ -64,7 +75,7 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {edit.available && (
         <Button
           variant="outline"
@@ -136,8 +147,13 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
         confirmLabel={user.isActive ? 'Desativar' : 'Ativar'}
         destructive={user.isActive}
         onConfirm={() => {
+          if (statusInFlight.current) return
+          statusInFlight.current = true
           setConfirming(null)
-          status.mutate({ id: user.id, isActive: !user.isActive })
+          status.mutate(
+            { id: user.id, isActive: !user.isActive },
+            { onSettled: () => { statusInFlight.current = false } },
+          )
         }}
         onCancel={() => setConfirming(null)}
       />
@@ -149,8 +165,10 @@ export function UserRowActions({ user, currentUserId }: UserRowActionsProps) {
         confirmLabel="Revogar"
         destructive
         onConfirm={() => {
+          if (revokeInFlight.current) return
+          revokeInFlight.current = true
           setConfirming(null)
-          revoke.mutate(user.id)
+          revoke.mutate(user.id, { onSettled: () => { revokeInFlight.current = false } })
         }}
         onCancel={() => setConfirming(null)}
       />

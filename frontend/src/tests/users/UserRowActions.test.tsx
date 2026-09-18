@@ -89,7 +89,10 @@ describe('UserRowActions', () => {
     expect(dialog).toHaveTextContent(/desativar usuário/i)
 
     await user.click(screen.getByRole('button', { name: 'Desativar' }))
-    expect(statusMutate).toHaveBeenCalledWith({ id: 'other-1', isActive: false })
+    expect(statusMutate).toHaveBeenCalledWith(
+      { id: 'other-1', isActive: false },
+      expect.anything(),
+    )
   })
 
   it('cancels the status confirmation on Escape without mutating', async () => {
@@ -149,18 +152,23 @@ describe('UserRowActions', () => {
     expect(screen.queryByRole('button', { name: /reenviar convite/i })).not.toBeInTheDocument()
   })
 
-  it('does not send a second status mutation on a double click of the confirm button', async () => {
+  it('confirming a status change mutates exactly once through the real dialog', async () => {
     renderActions(makeAdminUser({ id: 'other-1', isActive: true }), 'me-1')
 
     fireEvent.click(screen.getByRole('button', { name: /^desativar/i }))
     const confirmButton = await screen.findByRole('button', { name: 'Desativar' })
-    // ConfirmDialog's own confirmed-ref guard (established for this dialog in
-    // an earlier task) is what protects this path — ratified here because
-    // resend needed its own separate guard, and this is the check that the
-    // dialog-mediated actions do not need the same fix duplicated.
-    fireEvent.click(confirmButton)
     fireEvent.click(confirmButton)
 
+    // NOTE: this does not exercise the double-click race. Radix's real
+    // AlertDialogContent plays a CSS exit animation (animate-out,
+    // duration-200), and Presence keeps the confirm button mounted and
+    // clickable for that whole window in a real browser — jsdom has no CSS
+    // engine, so Presence sees no animation and unmounts the node
+    // synchronously on this first click. A second fireEvent.click here would
+    // land on a detached node and prove nothing. The real race — two clicks
+    // both landing before React unmounts — is covered in
+    // UserRowActions.confirmRace.test.tsx against a stand-in dialog that
+    // doesn't depend on jsdom's inert CSS to stay honest.
     expect(statusMutate).toHaveBeenCalledTimes(1)
   })
 
@@ -217,7 +225,7 @@ describe('UserRowActions', () => {
     expect(dialog).toHaveTextContent(/revogar convite/i)
 
     await user.click(screen.getByRole('button', { name: 'Revogar' }))
-    expect(revokeMutate).toHaveBeenCalledWith('other-1')
+    expect(revokeMutate).toHaveBeenCalledWith('other-1', expect.anything())
   })
 
   it('does not offer revoke for a non-pending invitation', () => {

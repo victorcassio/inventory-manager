@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/feedback/LoadingSpinner'
 import { ErrorState } from '@/components/feedback/ErrorState'
+import { EmptyState } from '@/components/feedback/EmptyState'
 import { UserForm } from '../components/UserForm'
 import { useUpdateUser, useUser } from '../hooks/useUsers'
 import type { UpdateUserFormValues } from '@/schemas/user.schema'
@@ -51,8 +52,23 @@ export function UserEditPage() {
 
       {isError && <ErrorState onRetry={() => refetch()} />}
 
-      {!isLoading && !isError && user && (
-        <Card className="max-w-lg">
+      {/* Row actions already hide "Editar" for an admin account, but that is
+          UX only — nothing stops this route from being reached by typing the
+          URL directly. The backend refuses the update regardless
+          (requireManageableTarget), so this is not a security boundary; it is
+          what keeps an admin who lands here from being shown a confusing
+          dead-end form: a role selector with no option matching their actual
+          role, wired to a submit that can never succeed. */}
+      {!isLoading && !isError && user && user.role === 'admin' && (
+        <EmptyState
+          title="Esta conta não pode ser editada por aqui"
+          description="Contas de administrador não são gerenciadas por esta tela."
+          action={{ label: 'Voltar para a lista', onClick: () => navigate('/users') }}
+        />
+      )}
+
+      {!isLoading && !isError && user && user.role !== 'admin' && (
+        <Card className="max-w-2xl">
           <CardHeader>
             <CardTitle>Dados do usuário</CardTitle>
           </CardHeader>

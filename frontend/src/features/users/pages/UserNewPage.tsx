@@ -42,7 +42,7 @@ export function UserNewPage() {
         <h2 className="text-2xl font-bold">Novo usuário</h2>
       </div>
 
-      <Card className="max-w-lg">
+      <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle>Dados do usuário</CardTitle>
         </CardHeader>
