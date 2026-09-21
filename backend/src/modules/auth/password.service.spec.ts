@@ -34,6 +34,7 @@ const mockTokens = {
   consume: jest.fn(),
   revokePending: jest.fn(),
   countRecent: jest.fn(),
+  payDummyIssueCost: jest.fn(),
 };
 const mockHashing = { hash: jest.fn(), verify: jest.fn(), rehashLegacy: jest.fn() };
 const mockMail = { send: jest.fn() };
@@ -107,6 +108,32 @@ describe('PasswordService', () => {
         message: GENERIC_RESET_MESSAGE,
       });
       expect(mockMail.send).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['nonexistent', null],
+      ['inactive', { ...user, isActive: false }],
+      ['unverified', { ...user, emailVerifiedAt: null }],
+      ['passwordless', { ...user, password: null }],
+    ])(
+      'pays the same round-trip cost as an eligible request for a(n) %s account, instead of returning immediately',
+      async (_l, found) => {
+        mockPrisma.user.findUnique.mockResolvedValue(found);
+        await service.requestReset('maria@test.com');
+        expect(mockTokens.payDummyIssueCost).toHaveBeenCalledWith(
+          UserActionTokenType.password_reset,
+          15,
+        );
+        expect(mockTokens.countRecent).not.toHaveBeenCalled();
+        expect(mockTokens.revokePending).not.toHaveBeenCalled();
+        expect(mockTokens.issue).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not pay the dummy cost for an eligible account', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(user);
+      await service.requestReset('maria@test.com');
+      expect(mockTokens.payDummyIssueCost).not.toHaveBeenCalled();
     });
 
     it('normalizes the e-mail before lookup', async () => {

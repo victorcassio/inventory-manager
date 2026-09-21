@@ -10,10 +10,10 @@ vi.mock('@/features/auth/hooks/useAuth', () => ({
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>
 
-function renderLoginForm(loginFn: () => Promise<void> = vi.fn()) {
+function renderLoginForm(loginFn: () => Promise<void> = vi.fn(), initialEntries?: unknown[]) {
   mockUseAuth.mockReturnValue({ login: loginFn, user: null, isAuthenticated: false, logout: vi.fn() })
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={(initialEntries as never) ?? ['/login']}>
       <LoginForm />
     </MemoryRouter>,
   )
@@ -62,6 +62,24 @@ describe('LoginForm', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Credenciais inválidas')).toBeInTheDocument()
+    })
+  })
+
+  it('offers a show/hide toggle on the password field, like the other password fields in this branch', () => {
+    renderLoginForm()
+    expect(screen.getByRole('button', { name: 'Mostrar senha' })).toBeInTheDocument()
+  })
+
+  it('renders the security notice from navigation state into an already-mounted role="status" region', async () => {
+    renderLoginForm(vi.fn(), [
+      { pathname: '/login', state: { securityNotice: 'password-changed' } },
+    ])
+    // Mounts empty (see LoginForm: text arrives one tick later via an
+    // effect, so an already-complete live region is never inserted as a
+    // fait accompli) and is filled shortly after — both states are
+    // reachable from this one render.
+    await waitFor(() => {
+      expect(screen.getByText('Senha alterada. Faça login novamente.')).toBeInTheDocument()
     })
   })
 })

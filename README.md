@@ -395,9 +395,14 @@ JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 
 # App
-PORT=3003
+PORT=3000
 NODE_ENV=development
 FRONTEND_URL="http://localhost:5173"
+
+# Set ONLY behind a reverse proxy/load balancer. Prefer a hop count ("1")
+# or the proxy's exact IP/CIDR — never "true" as a default. See
+# docs/security-checklist-deploy.md.
+TRUST_PROXY=
 
 # Password hashing — generate with: openssl rand -base64 48
 # Required. The app refuses to start without it. See docs/authentication-rbac.md.
@@ -562,11 +567,11 @@ src/tests/
 ### Backend — Jest
 
 ```bash
-cd backend && npm run test              # 437 unit tests
+cd backend && npm run test              # 455 unit tests
 cd backend && npm run test:e2e          # 36 end-to-end tests
 ```
 
-- **437 unit tests** across 24 suites (437/437 passing) + **36 e2e tests** across 2 suites (36/36 passing)
+- **455 unit tests** across 24 suites (455/455 passing) + **36 e2e tests** across 2 suites (36/36 passing)
 - Unit tests with PrismaService and dependency mocks
 - Coverage: all services, guards, and controllers, plus the users/auth/hashing/mail modules added in `feat/users-password-management`
 
@@ -786,7 +791,7 @@ const itemMap = new Map(items.map(i => [i.id, i]))
 
 ### Additional Protections
 
-- **Frontend**: routes protected with `ProtectedRoute` and `RoleGuard`; `ReactQueryDevtools` disabled in production; no action token, password, or session data is ever written to `localStorage`/`sessionStorage`
+- **Frontend**: routes protected with `ProtectedRoute` and `RoleGuard`; `ReactQueryDevtools` disabled in production; no action token or password is ever written to `localStorage`/`sessionStorage` — the access/refresh tokens and user profile ARE persisted to `localStorage` (Zustand `persist`, key `inventory-auth`) for session continuity across reloads, a deliberate trade-off, not an oversight; an XSS on this app can read them, which is why CSP/Helmet and output escaping carry the weight of preventing that in the first place (see the residual-risk backlog in `docs/security-checklist-deploy.md`)
 - **Backend**: guards validate JWT and role before any handler runs; filesystem paths never exposed in API responses; auth error messages are generic to prevent enumeration; a login/reset timing-mitigation (dummy Argon2id verification) keeps response time uniform whether or not an account exists
 - **Database**: queries use server-generated UUIDs; filesystem paths never returned in responses; user API responses use an explicit Prisma `select` allowlist that structurally excludes `password`
 - **Startup validation**: app refuses to start in `NODE_ENV=production` if `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` or `PASSWORD_PEPPER` are absent, too short, or contain weak placeholder values, or if `MAIL_DRIVER` is not `smtp` with a complete SMTP configuration
@@ -857,7 +862,7 @@ JWT_ACCESS_SECRET=<openssl rand -hex 64>
 JWT_REFRESH_SECRET=<openssl rand -hex 64>
 JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
-PORT=3003
+PORT=3000
 FRONTEND_URL=https://your-app.vercel.app
 
 # Password hashing pepper — REQUIRED, app refuses to start without it

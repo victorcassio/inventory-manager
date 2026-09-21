@@ -54,37 +54,108 @@ describe('JwtStrategy', () => {
   });
 
   describe('passwordChangedAt vs token iat', () => {
-    const changedAt = new Date('2026-06-01T12:00:00.000Z');
+    // Deliberately :500ms — not on a whole second — so a test that ever
+    // regressed to the old `payload.iat * 1000 < getTime()` comparison
+    // (which truncates iat's whole second to :000ms before comparing) would
+    // disagree with the millisecond-aware assertions below and fail loudly,
+    // instead of the truncation silently cancelling itself out against a
+    // changedAt that happens to land on a whole second.
+    const changedAt = new Date('2026-06-01T12:00:00.500Z');
+    const changedAtSeconds = Math.floor(changedAt.getTime() / 1000); // :00
     const changedUser = { ...eligible, passwordChangedAt: changedAt };
-
-    it('rejects a token issued before the last password change', async () => {
-      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
-      const iatBefore = Math.floor(new Date('2026-06-01T11:59:00.000Z').getTime() / 1000);
-
-      await expect(
-        strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin', iat: iatBefore }),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
-    });
-
-    it('accepts a token issued after the last password change', async () => {
-      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
-      const iatAfter = Math.floor(new Date('2026-06-01T12:01:00.000Z').getTime() / 1000);
-
-      await expect(
-        strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin', iat: iatAfter }),
-      ).resolves.toEqual(changedUser);
-    });
 
     it('accepts any token for a user with passwordChangedAt null (legacy account)', async () => {
       // The migration deliberately left this column NULL for pre-existing
       // users. Without the null guard in the strategy, every one of them
       // would be locked out instantly regardless of iat.
       (usersService.findById as jest.Mock).mockResolvedValue(eligible);
-      const veryOldIat = 0;
 
       await expect(
-        strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin', iat: veryOldIat }),
+        strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin', iat: 0 }),
       ).resolves.toEqual(eligible);
+    });
+
+    it('rejects a token issued the second before the change', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
+
+      await expect(
+        strategy.validate({
+          sub: 'user-1',
+          email: 'admin@test.com',
+          role: 'admin',
+          iat: changedAtSeconds - 1,
+        }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('accepts a token issued in the SAME civil second as the change', async () => {
+      // The bug this guards against: passwordChangedAt is 12:00:00.500Z, so
+      // a real login completing at 12:00:00.900Z (900ms later, well inside
+      // the same second) mints a token whose iat floors to the identical
+      // second, :00. The old `iat * 1000 < getTime()` compared 12:00:00.000
+      // against 12:00:00.500 and rejected this genuinely-fresh token —
+      // logging the user out immediately after a successful login until the
+      // next login happened to land in a later second.
+      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
+
+      await expect(
+        strategy.validate({
+          sub: 'user-1',
+          email: 'admin@test.com',
+          role: 'admin',
+          iat: changedAtSeconds,
+        }),
+      ).resolves.toEqual(changedUser);
+    });
+
+    it('accepts a token issued the second after the change', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
+
+      await expect(
+        strategy.validate({
+          sub: 'user-1',
+          email: 'admin@test.com',
+          role: 'admin',
+          iat: changedAtSeconds + 1,
+        }),
+      ).resolves.toEqual(changedUser);
+    });
+
+    it('rejects a token with no iat at all, once passwordChangedAt is set', async () => {
+      // Every token this app signs carries an iat (AuthService never passes
+      // `noTimestamp`); passport-jwt does not itself require or validate
+      // one. A payload missing it did not come from here and must not be
+      // trusted by default just because the comparison below it has nothing
+      // to compare against.
+      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
+
+      await expect(
+        strategy.validate({ sub: 'user-1', email: 'admin@test.com', role: 'admin' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    // Mutation-style check: this fails if `<` in the strategy is ever
+    // swapped for `<=` (which would start rejecting the same-civil-second
+    // case the test above requires to pass), pinning down that strict
+    // less-than — and only strict less-than — is what rejects.
+    it('the boundary is strict: iat one second before is rejected, iat exactly at the boundary is not', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue(changedUser);
+
+      const before = strategy.validate({
+        sub: 'user-1',
+        email: 'admin@test.com',
+        role: 'admin',
+        iat: changedAtSeconds - 1,
+      });
+      const atBoundary = strategy.validate({
+        sub: 'user-1',
+        email: 'admin@test.com',
+        role: 'admin',
+        iat: changedAtSeconds,
+      });
+
+      await expect(before).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(atBoundary).resolves.toEqual(changedUser);
     });
   });
 });

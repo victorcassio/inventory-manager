@@ -92,6 +92,7 @@ etapas nem as execute fora de ordem, mesmo sob pressão de tempo.
 | `PORT` | porta do servidor (ex: `3003`) |
 | `MAIL_DRIVER` | `smtp` (obrigatório em produção — `fake` é recusado na inicialização) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | credenciais reais do provedor SMTP (obrigatórios quando `MAIL_DRIVER=smtp`) |
+| `TRUST_PROXY` | nº de saltos ou IP/CIDR exato do proxy **se e somente se** houver reverse proxy/load balancer na frente (ver seção 5 — **nunca `true`** como padrão) — vazio/`false` se o backend é acessado direto |
 
 `SEED_ADMIN_PASSWORD` só é necessária no momento pontual de rodar
 `prisma/seed.ts` pela primeira vez — não precisa permanecer configurada como
@@ -127,12 +128,43 @@ variável de ambiente do processo do backend em produção.
 - [ ] HTTPS obrigatório — nunca aceitar HTTP em produção
 - [ ] Certificado SSL/TLS ativo e válido
 - [ ] Porta do backend **não acessível diretamente** via browser — apenas pelo frontend via CORS
+- [ ] **`TRUST_PROXY` configurado corretamente para a topologia real** — se
+      **qualquer** reverse proxy/load balancer/ingress fica na frente deste
+      processo (Railway, Render, Fly, nginx, ALB, k8s ingress — o caso comum
+      em produção), `TRUST_PROXY` **precisa** apontar para ele. Sem isso,
+      `req.ip` — usado pelo rate limiting por IP da seção 7 E pelo
+      `ipAddress` gravado em `AuditLog` — vira o IP do proxy para TODO
+      cliente: o rate limit de `forgot-password`/`login` deixa de ser por
+      usuário e passa a ser uma cota GLOBAL (um único atacante esgota a cota
+      de todo mundo), e a trilha forense de auditoria perde o IP real. Se o
+      backend for acessado DIRETAMENTE (sem proxy na frente), deixe
+      `TRUST_PROXY` vazio/`false` — setá-lo sem um proxy real torna `req.ip`
+      **falsificável** por qualquer cliente via `X-Forwarded-For`, o problema
+      inverso.
+  - [ ] **NUNCA use `TRUST_PROXY=true` como padrão de conveniência.** `true`
+        manda o Express confiar em TODO salto do cabeçalho e usar a entrada
+        MAIS À ESQUERDA de `X-Forwarded-For` como IP do cliente — isso só é
+        seguro se o processo for **literalmente inalcançável** por qualquer
+        caminho que não seja o proxy confiável, e se esse proxy **substituir**
+        o cabeçalho em vez de só acrescentar a ele (nem todo proxy faz isso).
+        Se o cliente conseguir adicionar entradas forjadas na frente do que o
+        proxy escreve, `true` lê a entrada forjada como se fosse o IP real.
+        Prefira **número de saltos** (`1` para exatamente um proxy — o
+        Express então confia na entrada de `X-Forwarded-For` a partir da
+        DIREITA, ou seja, a que só o SEU proxy poderia ter escrito, e ignora
+        qualquer prefixo que o cliente tenha forjado) ou o **IP/CIDR exato**
+        do proxy (`10.0.0.5` ou `10.0.0.0/24`), conforme a infraestrutura
+        real — nunca o valor genérico `true`.
 
 **Verificação:**
 ```bash
 # Deve retornar vazio (sem ACAO header) para origins desconhecidas
 curl -I -X OPTIONS https://sua-api.com/api/v1/customers \
   -H "Origin: https://evil-site.com" | grep -i "access-control-allow-origin"
+
+# Com TRUST_PROXY configurado para o proxy real: um X-Forwarded-For forjado
+# vindo de FORA do proxy não deve conseguir contornar o rate limit nem
+# aparecer no AuditLog — só o IP que o proxy de fato injeta é confiável.
 ```
 
 ---
@@ -225,6 +257,13 @@ reais de cliente.
 - [ ] **Build guard** — confirmar que o build do frontend usado no deploy
   passou pelo guard de bundle (`npm run build` no CI/pipeline, não apenas
   `vite build` direto — ver limitação conhecida no backlog).
+- [ ] **`TRUST_PROXY` reflete a topologia real** (só se houver reverse
+  proxy/load balancer na frente) — disparar uma requisição autenticada que
+  grave `AuditLog` (ex.: trocar a senha em `/account/security`) a partir de
+  uma rede/IP conhecido e confirmar que o `ipAddress` gravado é o IP real do
+  cliente, não o do proxy. Se vários smoke tests desta lista, feitos de
+  máquinas diferentes, gravarem o MESMO `ipAddress`, `TRUST_PROXY` está
+  incorreto.
 
 ---
 
@@ -245,7 +284,16 @@ reais de cliente.
 ## 9. Refresh tokens
 
 - [ ] Cleanup automático de tokens revogados e expirados ocorre a cada login (já implementado)
-- [ ] Tokens de refresh têm expiração de 7 dias (configurável via `JWT_REFRESH_EXPIRES_IN`)
+- [ ] Tokens de refresh têm expiração de 7 dias — **hardcoded** em
+      `AuthService.saveRefreshToken` (`auth.service.ts`), NÃO controlado por
+      `JWT_REFRESH_EXPIRES_IN`. Essa env var só afeta o `exp` embutido no JWT
+      assinado; o fluxo de refresh nunca verifica esse `exp` — ele busca o
+      token por valor exato no banco e compara `expiresAt` da própria linha.
+      Mudar `JWT_REFRESH_EXPIRES_IN` para encurtar/alongar a sessão por
+      exigência de segurança/compliance **não tem efeito real** — ver item 7
+      do backlog abaixo (recomendação pós-release: tornar isto de fato
+      configurável, ou remover a env var para não sugerir um controle que
+      não existe).
 - [ ] Refresh tokens são de uso único — após uso, são revogados e um novo é gerado (rotação implementada)
 
 ---
@@ -281,15 +329,40 @@ cd backend && npm run build
 
 ## Backlog de segurança/arquitetura (Task 20 — consolidado)
 
-Itens levantados pelas revisões das Tasks 15–20, consolidados e classificados
-aqui em 2026-09-18. Nenhum destes bloqueia esta release, exceto onde marcado.
+Itens levantados pelas revisões das Tasks 15–20, consolidados em 2026-09-18,
+mais o portão final de 6 revisões independentes (correção, segurança,
+acessibilidade/responsividade, migration/deploy, documentação-vs-código,
+bundle/performance) rodado sobre o diff completo `main...HEAD` em
+2026-09-18 antes do PR. Nenhum item abaixo bloqueia esta release, exceto onde
+marcado.
 
 ### Bloqueador de release
 
-Nenhum item conhecido até o momento desta consolidação. Se uma das revisões
-finais da Task 20 (seção 6 do plano) classificar algo abaixo — ou algo novo —
-como bloqueador real, a branch **não** é fechada sem antes apresentar a
-justificativa e obter decisão explícita.
+Nenhum item pendente. O portão final encontrou 2 achados Critical (ambos de
+**acurácia de documentação**, não de código: a claim de que nenhum "dado de
+sessão" vai para `localStorage`, e a claim de que `JWT_REFRESH_EXPIRES_IN`
+controla o TTL real do refresh token) e 7 Important (2 de segurança — oracle
+de tempo em `forgot-password` e ausência de `TRUST_PROXY`; 5 de
+acessibilidade, todos em `LoginForm`/`form.tsx`/`AppLayout` — controle
+`disabled` nativo, campo de senha sem toggle, região de status que nasce já
+preenchida, contraste do `FormLabel` em erro, títulos de página ausentes para
+as 4 rotas novas). Todos os 9 foram corrigidos.
+
+Um segundo checkpoint (2026-09-21), sobre as correções acima ainda não
+commitadas, fechou mais 4 pontos: (1) a comparação `iat`/`passwordChangedAt`
+em `JwtStrategy` foi trocada de milissegundo-truncado para segundos inteiros
+com igualdade aceita, e `iat` ausente passou a ser tratado como inválido —
+com testes de mutação (`<` vs `<=`) provando que só a desigualdade estrita
+rejeita; (2) essa mudança expôs uma corrida de mesmo-segundo latente em 2
+testes e2e (`reset-password`, `change-password`) que dependiam de sorte de
+timing — corrigidos com um helper que garante segundos civis distintos,
+confirmado estável em 3 execuções consecutivas; (3) `npm audit --omit=dev`
+rodado nos dois lados, com bump direcionado (sem major) de `axios`/
+`react-router-dom` no frontend — ver item 4 abaixo para o que foi corrigido
+e o que ficou no backlog por exigir major; (4) a documentação de
+`TRUST_PROXY` foi reforçada para nunca recomendar `true` como padrão.
+Nenhum achado Critical/Important novo sobreviveu a este checkpoint. Os
+itens abaixo são recomendações pós-release ou limitações aceitas.
 
 ### Recomendação pós-release
 
@@ -299,7 +372,8 @@ justificativa e obter decisão explícita.
    `id` antes de mintar a nova. Se um logout carrega o token pré-rotação
    porque a rotação terminou primeiro (corrida de rede, não de UI), a
    revogação não encontra nada e o token novo fica **órfão e válido no
-   servidor até expirar naturalmente** (7 dias, `JWT_REFRESH_EXPIRES_IN`). O
+   servidor até expirar naturalmente** (7 dias, hardcoded — ver item 6 abaixo
+   sobre `JWT_REFRESH_EXPIRES_IN` não controlar isto de fato). O
    frontend (Task 19: `waitForPendingRefresh`/`prepareToEndSession`) fecha
    quase toda a janela client-side — o que resta exige que a corrida
    aconteça fora do controle do cliente. **Recomendação concreta:** o
@@ -322,19 +396,39 @@ justificativa e obter decisão explícita.
    silenciosamente. Não há CI/workflow neste repositório ainda.
    **Recomendação:** ao criar um pipeline de CI/CD, garantir que o comando de
    build usado seja sempre `npm run build`, nunca `vite build` isolado.
-4. **`npm audit` do frontend tem vulnerabilidades atuais em dependências de
-   runtime** (não só a cadeia dev-only já conhecida): `axios` (^1.16.1) e
-   `react-router-dom` (^6.30.4) têm advisories abertos (proxy/prototype
-   pollution/DoS no axios; open-redirect e injeção via `deserializeErrors`
-   no react-router — este último é específico de SSR, que este app não usa).
-   `npm audit fix` (sem `--force`) resolve ambos sem bump de major.
-   Nenhum caminho de exploração confirmado nesta auditoria — a configuração
-   do axios usada pelo app é toda estática, não vem de entrada do usuário, e
-   nenhuma rota usa `<Link>`/`navigate` com destino controlado por
-   parâmetro externo. **Recomendação:** aplicar `npm audit fix` (não
-   `--force`) num PR dedicado, confirmando que a opção `redact` do axios
-   (que exige `^1.16.1`, ver nota na memória do projeto) continua disponível
-   na versão resultante, e rodar a suíte completa antes de mergear.
+4. **`npm audit` de produção (`--omit=dev`) do frontend e do backend, e bump
+   direcionado do que tinha correção sem major** — feito nesta consolidação
+   (2026-09-21), não apenas planejado:
+   - **Frontend, corrigido:** `axios` 1.16.1 → **1.20.0** e `react-router-dom`
+     6.30.4 → **6.30.6** (ambas patches dentro da mesma major, `npm install
+     axios@1.20.0 react-router-dom@6.30.6`, sem `npm audit fix` amplo). Isso
+     zera as 10 advisories de `axios` (todas <1.18.0) e a advisory própria de
+     `react-router-dom` (open-redirect, `<=6.30.5`); `form-data` (transitiva
+     de `axios`) resolveu sozinha para 4.0.6, zerando também a dela. A opção
+     `redact` do axios (exigida em `client.ts`) continua disponível em
+     1.20.0 — confirmado pela suíte de testes passando sem alteração.
+     Impacto de bundle: caminho crítico público 146.4 → **149.1 kB gzip**
+     (+2.7 kB, dentro de `http-vendor`), ainda longe do teto de 200 kB do
+     guard. Suítes completas, `tsc`, lint e build rodados depois — 0
+     regressões.
+   - **Frontend, sem correção disponível (major exigido):** `react-router`
+     (dependência transitiva de `react-router-dom`, mesmo par de versões)
+     ainda tem 2 advisories moderate — open-redirect via backslash em
+     `<Link>`/`useNavigate` e injeção de construtor via `deserializeErrors()`
+     em hidratação SSR — ambas só corrigidas em `react-router@7.18.0+`, ou
+     seja, major bump de `react-router-dom` 6→7. Este app não usa SSR
+     (elimina a segunda) nem navega para destino controlado por parâmetro
+     externo (mitiga a primeira, sem eliminar). **Mantido no backlog** —
+     upgrade para v7 é mudança de major com API própria, fora do escopo
+     deste fechamento; avaliar num PR dedicado.
+   - **Backend, sem correção disponível (major exigido):** `npm audit
+     --omit=dev` aponta `@nestjs/core`/`@nestjs/common`/`@nestjs/platform-express`
+     (moderate/high) e `prisma` (high) como diretos — todos só resolvidos
+     numa major (`@nestjs/*` 10→12; a faixa vulnerável do `prisma` cobre até
+     a última dev release, sem stable corrigida na mesma major 7.x
+     disponível no momento desta auditoria). **Mantido no backlog** — trocar
+     a major do NestJS ou do Prisma é um esforço de regressão própria, fora
+     do escopo deste fechamento.
 5. **`clearAuth()` em `ResetPasswordPage`/`ActivateAccountPage` não revoga
    remotamente uma sessão PRÉ-EXISTENTE e não relacionada** que porventura
    já estivesse aberta neste navegador — ambas as páginas chamam
@@ -367,15 +461,33 @@ justificativa e obter decisão explícita.
    `LoginForm.test.tsx` para exercitar o cliente axios real (como
    `endSession.test.tsx` já faz) em vez de mockar `login()` diretamente, para
    não voltar a ficar vacuamente verde.
+7. **`JWT_REFRESH_EXPIRES_IN` não controla o TTL real do refresh token** —
+   confirmado nesta auditoria: `AuthService.saveRefreshToken`
+   (`auth.service.ts`) grava `expiresAt` com `new Date()` + 7 dias
+   hardcoded; `refreshTokens()` valida esse `expiresAt` da linha do banco, e
+   nunca decodifica/verifica o `exp` do JWT assinado (que é o único lugar
+   onde `JWT_REFRESH_EXPIRES_IN` entra). A env var existe, está documentada
+   como configurável em mais de um lugar (README, seção 2 e 9 deste
+   checklist antes desta correção) e simplesmente não faz nada no caminho
+   que importa — um operador que a mude para reduzir a janela de sessão por
+   exigência de segurança/compliance não terá o efeito esperado, sem
+   nenhum erro ou aviso. Sem impacto de segurança imediato (o hardcoded é 7
+   dias, igual ao default da env var), mas é uma incoerência entre
+   documentação/intenção e comportamento real. **Recomendação:** ou fazer
+   `saveRefreshToken` calcular `expiresAt` a partir de
+   `JWT_REFRESH_EXPIRES_IN` (parseando a mesma sintaxe de duração que o
+   `JwtModule` já aceita), ou remover a env var/documentação que sugere
+   controle sobre isso, para não induzir uma mudança de configuração sem
+   efeito.
 
 ### Limitação aceita/documentada
 
-7. **Sem sincronização entre abas** (`storage` event do `localStorage` não é
+8. **Sem sincronização entre abas** (`storage` event do `localStorage` não é
    escutado por `auth.store`) — deslogar numa aba não desloga outra aba
    aberta da mesma sessão até a próxima chamada de rede nela. Puramente UX,
    sem brecha de segurança (o backend já invalidou o refresh/access token; a
    outra aba só demora a perceber).
-8. **Token de convite/reset exposto na barra de endereço, no histórico do
+9. **Token de convite/reset exposto na barra de endereço, no histórico do
    navegador e no `tab.url` de extensões com permissão `tabs`** — o link
    chega por e-mail com o token no fragmento (`#token=...`), que nunca é
    enviado ao servidor nem aparece em `Referer`, mas fica visível no
@@ -384,7 +496,7 @@ justificativa e obter decisão explícita.
    eliminado. Uma correção completa exigiria o link do e-mail apontar para um
    endpoint que valida o token no servidor e troca por um cookie httpOnly ou
    handle opaco — mudança arquitetural, fora do escopo desta feature.
-9. **Throttling em memória do processo** — ver seção 7 acima. Aceito para o
+10. **Throttling em memória do processo** — ver seção 7 acima. Aceito para o
    deploy de réplica única recomendado neste README; passa a exigir um
    storage compartilhado (Redis) se o deploy escalar para múltiplas réplicas.
 

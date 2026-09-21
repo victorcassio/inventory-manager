@@ -85,6 +85,21 @@ describe('appConfig', () => {
     expect(cfg.jwt.accessSecret).toBe(process.env.JWT_ACCESS_SECRET);
   });
 
+  it.each([
+    [undefined, false],
+    ['', false],
+    ['false', false],
+    ['true', true],
+    ['1', 1],
+    ['2', 2],
+    ['loopback', 'loopback'],
+    ['10.0.0.0/8,172.16.0.0/12', '10.0.0.0/8,172.16.0.0/12'],
+  ])('parses TRUST_PROXY=%p as %p', (raw, expected) => {
+    if (raw === undefined) delete process.env.TRUST_PROXY;
+    else process.env.TRUST_PROXY = raw;
+    expect(appConfig().trustProxy).toBe(expected);
+  });
+
   it('never returns the pepper under a key that looks loggable', () => {
     const cfg = appConfig();
     expect(JSON.stringify(cfg)).toContain('passwordPepper');

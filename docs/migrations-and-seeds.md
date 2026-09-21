@@ -62,7 +62,33 @@ desenvolvimento nem em qualquer banco com dados reais):
   conflito.
 - Recuperação: após corrigir manualmente o e-mail duplicado e marcar a
   migration como `--rolled-back` (`prisma migrate resolve`), reaplicar
-  `prisma migrate deploy` teve sucesso.
+  `prisma migrate deploy` teve sucesso — **repetido de novo, de forma
+  independente, no portão final antes do PR** (2026-09-18), com o mesmo
+  resultado.
+
+**Por que não há corrida entre o preflight e uma escrita concorrente:** o
+preflight é um `SELECT`/`GROUP BY` sem lock explícito contra `INSERT`
+concorrente em `users`. Isso é seguro aqui porque, durante a janela
+"migration antes do backend" (ver ordem abaixo), a versão ANTIGA do backend
+ainda no ar não tem nenhum endpoint que crie usuário — `UsersController` é
+inteiramente novo desta feature. A única escrita que o backend antigo faz em
+`users` nessa janela é `last_login` no login, que não pode criar uma colisão
+de e-mail. Se um futuro deploy tiver múltiplas versões do backend
+capazes de criar usuários rodando simultaneamente, essa premissa deixa de
+valer e o preflight precisaria de um lock explícito.
+
+**Janela de indisponibilidade de escrita:** o `ALTER TABLE`, o `UPDATE` de
+backfill e o `CREATE UNIQUE INDEX` (sem `CONCURRENTLY`) tomam um lock breve
+em `users` — da ordem de milissegundos para o volume de linhas desta tabela
+(equipe interna, não clientes). Uma tentativa de login exatamente nesse
+instante pode sofrer uma latência pontual, não uma janela de manutenção
+agendada.
+
+**Reversão:** o esquema desta migration é só aditivo (nenhuma coluna
+removida/renomeada que código antigo leia) e o código pré-feature ignora as
+colunas/tabela novas sem erro. Se for necessário voltar para a versão
+anterior do backend por outro motivo, **não é necessário reverter o schema**
+— não existe nem é preciso existir uma down-migration para este caso.
 
 ## Ordem obrigatória num deploy real
 

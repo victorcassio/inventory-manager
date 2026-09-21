@@ -55,7 +55,16 @@ export class PasswordService {
     const user = await this.prisma.user.findUnique({ where: { email: normalized } });
 
     const eligible = Boolean(user && user.isActive && user.emailVerifiedAt && user.password);
-    if (!user || !eligible) {
+    if (!eligible) {
+      // Approximates the round-trip cost the branch below spends (a count
+      // query, then a transaction with three writes) so response latency
+      // cannot be used to enumerate accounts — mirrors
+      // HashingService.verifyDummy()'s rationale for the login path.
+      // Without this, a nonexistent/ineligible address answers faster than
+      // an eligible one every single time. See
+      // UserActionTokensService.payDummyIssueCost for the exact shape and
+      // its limits.
+      await this.tokens.payDummyIssueCost(UserActionTokenType.password_reset, RESET_WINDOW_MINUTES);
       return { message: GENERIC_RESET_MESSAGE };
     }
 

@@ -18,6 +18,7 @@ const mockPrisma = {
     findMany: jest.fn(),
     findFirst: jest.fn(),
   },
+  $transaction: jest.fn(),
 };
 
 describe('UserActionTokensService', () => {
@@ -25,6 +26,7 @@ describe('UserActionTokensService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserActionTokensService,
@@ -172,6 +174,37 @@ describe('UserActionTokensService', () => {
       expect(where.userId).toBe('user-1');
       expect(where.type).toBe(UserActionTokenType.password_reset);
       expect(where.createdAt.gte).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('payDummyIssueCost', () => {
+    it('runs a count and a transaction with 3 writes, touching only a dummy id — never a real userId', async () => {
+      // 3 writes: the real path (requestReset's transaction) runs
+      // revokePending's updateMany, issue()'s create, and
+      // pruneTerminal's deleteMany — this mirrors that shape with a second
+      // updateMany standing in for the create (see the doc comment on
+      // payDummyIssueCost for why create itself can't be mirrored).
+      mockPrisma.userActionToken.count.mockResolvedValue(0);
+      mockPrisma.userActionToken.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.userActionToken.deleteMany.mockResolvedValue({ count: 0 });
+
+      await service.payDummyIssueCost(UserActionTokenType.password_reset, 15);
+
+      expect(mockPrisma.userActionToken.count).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.userActionToken.updateMany).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.userActionToken.deleteMany).toHaveBeenCalledTimes(1);
+
+      const dummyId = '00000000-0000-0000-0000-000000000000';
+      for (const call of [
+        mockPrisma.userActionToken.count.mock.calls[0][0],
+        mockPrisma.userActionToken.updateMany.mock.calls[0][0],
+        mockPrisma.userActionToken.updateMany.mock.calls[1][0],
+        mockPrisma.userActionToken.deleteMany.mock.calls[0][0],
+      ]) {
+        expect(call.where.userId ?? call.where.id).toBe(dummyId);
+        expect(call.where.type).toBe(UserActionTokenType.password_reset);
+      }
     });
   });
 

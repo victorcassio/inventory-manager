@@ -15,6 +15,9 @@ const RETENTION_DAYS = 30;
 
 const TOKEN_BYTES = 32;
 
+/** Never a real row's id — used only to shape a no-op query/transaction. */
+const DUMMY_USER_ID = '00000000-0000-0000-0000-000000000000';
+
 /** The generic message used for every token defect — absent, expired, used, revoked, wrong purpose. */
 export const INVALID_TOKEN_MESSAGE = 'Link inválido ou expirado';
 
@@ -105,6 +108,46 @@ export class UserActionTokensService {
       data: { revokedAt: new Date() },
     });
     return count;
+  }
+
+  /**
+   * Approximates the round-trip cost `requestReset()` spends on an eligible
+   * account — a count query, then a transaction with three writes
+   * (`revokePending`'s `updateMany`, `issue()`'s `create`, and its
+   * `pruneTerminal`'s `deleteMany`) — without touching any real row. Called
+   * on the ineligible branch so response latency cannot be used to
+   * enumerate accounts; same rationale as `HashingService.verifyDummy()`
+   * for the login path. `create` itself cannot be mirrored (it would need a
+   * real `users.id` to satisfy the foreign key), so a second no-op
+   * `updateMany` stands in for its write cost instead — the three
+   * statements below are not byte-for-byte identical to the real path, but
+   * match its shape (1 read, then 3 writes in one transaction) closely
+   * enough that the difference is sub-millisecond, not response-time
+   * distinguishable.
+   */
+  async payDummyIssueCost(type: UserActionTokenType, sinceMinutes: number): Promise<void> {
+    await this.prisma.userActionToken.count({
+      where: {
+        userId: DUMMY_USER_ID,
+        type,
+        createdAt: { gte: new Date(Date.now() - sinceMinutes * 60_000) },
+      },
+    });
+
+    await this.prisma.$transaction(async (tx: Tx) => {
+      await tx.userActionToken.updateMany({
+        where: { userId: DUMMY_USER_ID, type, usedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      // Stands in for issue()'s create — see the doc comment above.
+      await tx.userActionToken.updateMany({
+        where: { userId: DUMMY_USER_ID, type, usedAt: { not: null } },
+        data: { revokedAt: new Date() },
+      });
+      await tx.userActionToken.deleteMany({
+        where: { userId: DUMMY_USER_ID, type, id: DUMMY_USER_ID },
+      });
+    });
   }
 
   async countRecent(

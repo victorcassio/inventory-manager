@@ -37,6 +37,21 @@ function lastTokenFrom(mail: FakeMailService): string {
   return match[1];
 }
 
+/**
+ * JwtStrategy's passwordChangedAt gate compares `iat` against
+ * passwordChangedAt at ONE-SECOND resolution and, by design, accepts
+ * equality — a token minted in the same civil second as the change is not
+ * treated as pre-change (see jwt.strategy.ts). Any test that captures a
+ * session's access token and later asserts the gate invalidated it must
+ * guarantee the login and the change land in different seconds, or the
+ * assertion's outcome depends on how fast the machine running it happens to
+ * be. Waits only the remainder of the current second, not a fixed delay.
+ */
+async function sleepPastCurrentSecond(): Promise<void> {
+  const msIntoSecond = Date.now() % 1000;
+  await new Promise((resolve) => setTimeout(resolve, 1000 - msIntoSecond + 50));
+}
+
 describe('Users and passwords (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -501,6 +516,7 @@ describe('Users and passwords (e2e)', () => {
 
     it('resets the password, revokes sessions, and is single-use', async () => {
       const session = await login(ATTENDANT_EMAIL, PASSWORD);
+      await sleepPastCurrentSecond();
 
       await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
       const token = lastTokenFrom(mail);
@@ -587,6 +603,7 @@ describe('Users and passwords (e2e)', () => {
   describe('change-password', () => {
     it('changes the password and ends every session', async () => {
       const session = await login(ATTENDANT_EMAIL, PASSWORD);
+      await sleepPastCurrentSecond();
 
       await api()
         .post('/api/v1/auth/change-password')

@@ -1,5 +1,30 @@
 import { registerAs } from '@nestjs/config';
 
+/**
+ * Express's `trust proxy` setting, parsed from TRUST_PROXY. Unset/"false"
+ * keeps Express's own default (do not trust X-Forwarded-For at all) — safe
+ * only when nothing sits in front of this process. Deploying behind any
+ * reverse proxy/load balancer/ingress WITHOUT setting this correctly makes
+ * every client share one req.ip: per-IP rate limiting on /auth/* becomes a
+ * single GLOBAL quota (one attacker can lock out every user), and the
+ * ipAddress recorded in AuditLog is the proxy's, not the real client's.
+ *
+ * "true" is accepted (Express itself supports it) but should not be used as
+ * a default: it trusts every hop and reads the LEFTMOST X-Forwarded-For
+ * entry, which a client can forge by prepending fake addresses if the real
+ * proxy appends to the header instead of replacing it. Prefer a hop count
+ * ("1" for exactly one proxy — Express then trusts the entry the Nth
+ * position from the RIGHT, the one only your own proxy could have written)
+ * or the proxy's exact IP/CIDR. See docs/security-checklist-deploy.md.
+ */
+function parseTrustProxy(raw: string | undefined): boolean | number | string {
+  if (raw === undefined || raw === '') return false;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  if (/^\d+$/.test(raw)) return parseInt(raw, 10);
+  return raw; // comma-separated IPs/subnets/interfaces — Express parses this itself.
+}
+
 export default registerAs('app', () => {
   const nodeEnv = process.env.NODE_ENV ?? 'development';
   const isProduction = nodeEnv === 'production';
@@ -61,6 +86,7 @@ export default registerAs('app', () => {
     port: parseInt(process.env.PORT ?? '3000', 10),
     nodeEnv,
     frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
     passwordPepper: process.env.PASSWORD_PEPPER as string,
     jwt: {
       accessSecret: process.env.JWT_ACCESS_SECRET,

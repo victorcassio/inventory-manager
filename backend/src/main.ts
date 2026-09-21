@@ -14,6 +14,14 @@ async function bootstrap() {
   const frontendUrl = configService.get<string>('app.frontendUrl');
   const port = configService.get<number>('app.port') ?? 3000;
 
+  // Explicit even when false (Express's own default): req.ip and the
+  // rate-limiter/audit-log IP it feeds only reflect the real client when
+  // this matches the actual deploy topology. See app.config.ts.
+  // INestApplication doesn't expose Express's `set()` — go through the
+  // underlying HTTP adapter's instance instead of casting `app` itself,
+  // which would silence unrelated type errors too.
+  app.getHttpAdapter().getInstance().set('trust proxy', configService.get('app.trustProxy'));
+
   app.use(helmet());
 
   const allowedOrigins = [frontendUrl, 'http://localhost:5173', 'http://localhost:5174'];
