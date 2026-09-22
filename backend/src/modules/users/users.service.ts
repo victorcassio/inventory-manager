@@ -242,6 +242,15 @@ export class UsersService {
           where: { userId: id, revoked: false },
           data: { revoked: true },
         });
+
+        // Otherwise a disabled account keeps a live invitation or password-reset
+        // link — usable exactly like a renewable session, just through a
+        // different door. Both revoked in the same transaction as isActive so
+        // the two can never disagree: activate()/resetPassword() additionally
+        // re-check isActive inside their own transaction as defense in depth,
+        // but the token being unusable is the first line, not the only one.
+        await this.tokens.revokePending(id, UserActionTokenType.invitation, tx);
+        await this.tokens.revokePending(id, UserActionTokenType.password_reset, tx);
       }
 
       await this.audit.log(

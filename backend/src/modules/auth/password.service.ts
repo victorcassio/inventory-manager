@@ -10,7 +10,10 @@ import { UserActionTokenType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService, Tx } from '../audit/audit.service';
 import { HashingService } from '../hashing/hashing.service';
-import { UserActionTokensService } from '../user-action-tokens/user-action-tokens.service';
+import {
+  INVALID_TOKEN_MESSAGE,
+  UserActionTokensService,
+} from '../user-action-tokens/user-action-tokens.service';
 import { MAIL_SERVICE, MailService } from '../mail/mail.service';
 import { buildPasswordResetEmail } from '../mail/templates/password-reset.template';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -111,6 +114,13 @@ export class PasswordService {
       throw new BadRequestException('A confirmação não corresponde à senha');
     }
 
+    // Cheap check BEFORE Argon2id — see InvitationsService.activate() for
+    // the identical rationale. Not a security boundary; consume() below is.
+    const looksValid = await this.tokens.looksValid(dto.token, UserActionTokenType.password_reset);
+    if (!looksValid) {
+      throw new BadRequestException(INVALID_TOKEN_MESSAGE);
+    }
+
     const passwordHash = await this.hashing.hash(dto.password);
 
     await this.prisma.$transaction(async (tx: Tx) => {
@@ -120,10 +130,28 @@ export class PasswordService {
         tx,
       );
 
-      await tx.user.update({
-        where: { id: userId },
+      // Conditioned on the account still being eligible, not a plain
+      // update: if it was deactivated (or otherwise lost eligibility)
+      // after the preflight check above, this matches zero rows and the
+      // throw below rolls back the whole transaction — including
+      // consume()'s usedAt write, so the token is never left marked used
+      // for a reset that did not actually happen. Same eligibility
+      // definition used everywhere else in this file (requestReset) and
+      // in AuthService.validateUser. Defense in depth alongside
+      // setStatus() revoking pending reset tokens on deactivation.
+      const { count } = await tx.user.updateMany({
+        where: {
+          id: userId,
+          isActive: true,
+          emailVerifiedAt: { not: null },
+          password: { not: null },
+        },
         data: { password: passwordHash, passwordChangedAt: new Date() },
       });
+
+      if (count !== 1) {
+        throw new BadRequestException(INVALID_TOKEN_MESSAGE);
+      }
 
       await tx.refreshToken.updateMany({
         where: { userId, revoked: false },
@@ -163,13 +191,38 @@ export class PasswordService {
       throw new BadRequestException('A nova senha deve ser diferente da senha atual');
     }
 
+    // Captured BEFORE hash(): Argon2id (memoryCost 64 MiB, timeCost 3) takes
+    // long enough that a concurrent reset/change/deactivation can complete
+    // entirely while this call is still hashing. The write below is
+    // conditioned on the stored hash still being EXACTLY this value, so
+    // that race loses cleanly — the stale request's write matches zero
+    // rows — instead of silently overwriting whatever won in the meantime.
+    // A plain re-read right before the write would still leave a TOCTOU gap
+    // between the read and the write; the guarantee has to be in the write
+    // itself, which is why this is a conditional updateMany, not a second
+    // findUnique followed by an unconditional update.
+    const verifiedAgainstHash = user.password;
     const passwordHash = await this.hashing.hash(dto.newPassword);
 
     await this.prisma.$transaction(async (tx: Tx) => {
-      await tx.user.update({
-        where: { id: userId },
+      const { count } = await tx.user.updateMany({
+        where: {
+          id: userId,
+          password: verifiedAgainstHash,
+          isActive: true,
+          emailVerifiedAt: { not: null },
+        },
         data: { password: passwordHash, passwordChangedAt: new Date() },
       });
+
+      if (count !== 1) {
+        // The account was deactivated, or its password already changed by
+        // a concurrent reset/change that got there first — safe, generic
+        // failure. Nothing below this line runs: no session is revoked
+        // (they belong to whichever operation actually won) and no
+        // success is audited.
+        throw new UnauthorizedException('Sessão inválida');
+      }
 
       // Every session ends, including the caller's — the frontend redirects to login.
       await tx.refreshToken.updateMany({

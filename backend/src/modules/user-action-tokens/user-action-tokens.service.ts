@@ -97,6 +97,36 @@ export class UserActionTokensService {
     return { userId: consumed.userId };
   }
 
+  /**
+   * Cheap existence/validity check, BEFORE the caller pays Argon2id's cost
+   * (memoryCost 64 MiB, timeCost 3) on what may be an obviously-dead token.
+   * Read-only: never marks anything used, never returns the digest or any
+   * field beyond the three needed to decide, and applies exactly the same
+   * criteria `consume()` enforces atomically (type match, unused,
+   * unrevoked, unexpired) — so a token this method calls valid but that
+   * `consume()` later rejects is a real race (concurrent use/revocation/
+   * expiry between the two calls), not a mismatch between their rules.
+   *
+   * This is an optimization, not a security boundary: `consume()`'s atomic
+   * conditional update remains the only thing that actually authorizes
+   * single-use. Skipping this check entirely would only cost more CPU on
+   * invalid tokens, never a security regression — which is exactly what
+   * the mutation check for this fix (moving hash() before the preflight)
+   * has to prove by making the "did not call hash()" tests fail.
+   */
+  async looksValid(rawToken: string, type: UserActionTokenType): Promise<boolean> {
+    if (typeof rawToken !== 'string' || rawToken.length === 0) return false;
+
+    const tokenHash = hashActionToken(rawToken);
+    const token = await this.prisma.userActionToken.findFirst({
+      where: { tokenHash, type },
+      select: { usedAt: true, revokedAt: true, expiresAt: true },
+    });
+
+    if (!token) return false;
+    return !token.usedAt && !token.revokedAt && token.expiresAt > new Date();
+  }
+
   async revokePending(
     userId: string,
     type: UserActionTokenType,

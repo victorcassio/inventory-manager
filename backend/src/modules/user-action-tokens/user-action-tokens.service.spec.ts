@@ -163,6 +163,84 @@ describe('UserActionTokensService', () => {
     });
   });
 
+  describe('looksValid', () => {
+    it('returns false and touches nothing when the token is absent', async () => {
+      mockPrisma.userActionToken.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.looksValid('raw-token', UserActionTokenType.invitation),
+      ).resolves.toBe(false);
+      expect(mockPrisma.userActionToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('returns true for a live token', async () => {
+      mockPrisma.userActionToken.findFirst.mockResolvedValue({
+        usedAt: null,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      await expect(
+        service.looksValid('raw-token', UserActionTokenType.invitation),
+      ).resolves.toBe(true);
+    });
+
+    it.each([
+      ['used', { usedAt: new Date(), revokedAt: null, expiresAt: new Date(Date.now() + 60_000) }],
+      ['revoked', { usedAt: null, revokedAt: new Date(), expiresAt: new Date(Date.now() + 60_000) }],
+      ['expired', { usedAt: null, revokedAt: null, expiresAt: new Date(Date.now() - 1000) }],
+    ])('returns false for a %s token', async (_label, found) => {
+      mockPrisma.userActionToken.findFirst.mockResolvedValue(found);
+      await expect(
+        service.looksValid('raw-token', UserActionTokenType.invitation),
+      ).resolves.toBe(false);
+    });
+
+    it('never marks the token as used — read-only', async () => {
+      mockPrisma.userActionToken.findFirst.mockResolvedValue({
+        usedAt: null,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      await service.looksValid('raw-token', UserActionTokenType.invitation);
+
+      expect(mockPrisma.userActionToken.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.userActionToken.create).not.toHaveBeenCalled();
+      expect(mockPrisma.userActionToken.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('selects only the fields needed to decide — never the digest, never userId', async () => {
+      mockPrisma.userActionToken.findFirst.mockResolvedValue({
+        usedAt: null,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      await service.looksValid('raw-token', UserActionTokenType.invitation);
+
+      const call = mockPrisma.userActionToken.findFirst.mock.calls[0][0];
+      expect(call.select).toEqual({ usedAt: true, revokedAt: true, expiresAt: true });
+      expect(call.select.tokenHash).toBeUndefined();
+      expect(call.select.userId).toBeUndefined();
+    });
+
+    it('scopes the lookup by type — a token presented for the wrong purpose looks invalid', async () => {
+      mockPrisma.userActionToken.findFirst.mockResolvedValue(null);
+
+      await service.looksValid('raw-token', UserActionTokenType.password_reset);
+
+      expect(mockPrisma.userActionToken.findFirst.mock.calls[0][0].where.type).toBe(
+        UserActionTokenType.password_reset,
+      );
+    });
+
+    it('returns false for an empty token without querying the database', async () => {
+      await expect(service.looksValid('', UserActionTokenType.invitation)).resolves.toBe(false);
+      expect(mockPrisma.userActionToken.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
   describe('countRecent', () => {
     it('counts tokens of one type created within the window', async () => {
       mockPrisma.userActionToken.count.mockResolvedValue(3);

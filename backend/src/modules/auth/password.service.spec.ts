@@ -25,7 +25,7 @@ const user = {
 };
 
 const mockPrisma = {
-  user: { findUnique: jest.fn(), update: jest.fn() },
+  user: { findUnique: jest.fn(), updateMany: jest.fn() },
   refreshToken: { updateMany: jest.fn() },
   $transaction: jest.fn(),
 };
@@ -35,7 +35,20 @@ const mockTokens = {
   revokePending: jest.fn(),
   countRecent: jest.fn(),
   payDummyIssueCost: jest.fn(),
+  looksValid: jest.fn(),
 };
+
+/**
+ * A promise plus its own resolve function, exposed separately — lets a test
+ * control exactly when an awaited step completes instead of relying on real
+ * elapsed time. Used below to interleave two "concurrent" service calls in a
+ * fixed, repeatable order.
+ */
+function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(res => { resolve = res; });
+  return { promise, resolve };
+}
 const mockHashing = { hash: jest.fn(), verify: jest.fn(), rehashLegacy: jest.fn() };
 const mockMail = { send: jest.fn() };
 const mockAudit = { log: jest.fn() };
@@ -62,6 +75,7 @@ describe('PasswordService', () => {
     mockTokens.countRecent.mockResolvedValue(0);
     mockTokens.revokePending.mockResolvedValue(0);
     mockTokens.issue.mockResolvedValue('RAW_TOKEN');
+    mockTokens.looksValid.mockResolvedValue(true);
     // requestReset() fires this off without awaiting it — it must always
     // return a real promise (not undefined) for the unawaited .catch() to
     // attach to. Individual tests override this with mockRejectedValue /
@@ -244,16 +258,28 @@ describe('PasswordService', () => {
     beforeEach(() => {
       mockTokens.consume.mockResolvedValue({ userId: 'user-1' });
       mockHashing.hash.mockResolvedValue('$argon2id$new');
-      mockPrisma.user.update.mockResolvedValue(user);
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
     });
 
     it('writes the new hash and stamps passwordChangedAt', async () => {
       await service.resetPassword(dto);
 
-      const data = mockPrisma.user.update.mock.calls[0][0].data;
-      expect(data.password).toBe('$argon2id$new');
-      expect(data.passwordChangedAt).toBeInstanceOf(Date);
+      const call = mockPrisma.user.updateMany.mock.calls[0][0];
+      expect(call.data.password).toBe('$argon2id$new');
+      expect(call.data.passwordChangedAt).toBeInstanceOf(Date);
+    });
+
+    it('conditions the write on the user still being eligible', async () => {
+      await service.resetPassword(dto);
+
+      const where = mockPrisma.user.updateMany.mock.calls[0][0].where;
+      expect(where).toEqual({
+        id: 'user-1',
+        isActive: true,
+        emailVerifiedAt: { not: null },
+        password: { not: null },
+      });
     });
 
     it('revokes every refresh token for the user', async () => {
@@ -273,7 +299,41 @@ describe('PasswordService', () => {
       mockTokens.consume.mockRejectedValue(new BadRequestException('Link inválido ou expirado'));
 
       await expect(service.resetPassword(dto)).rejects.toThrow('Link inválido ou expirado');
-      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects with the generic message, before hashing, when the preflight finds the token invalid', async () => {
+      mockTokens.looksValid.mockResolvedValue(false);
+
+      await expect(service.resetPassword(dto)).rejects.toThrow('Link inválido ou expirado');
+      expect(mockHashing.hash).not.toHaveBeenCalled();
+      expect(mockTokens.consume).not.toHaveBeenCalled();
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      expect(mockAudit.log).not.toHaveBeenCalled();
+    });
+
+    it('runs the preflight against the password_reset type, and still hashes exactly once for a token that passes it', async () => {
+      // Ordering (preflight before hash) is established by the adjacent
+      // "rejects with the generic message, before hashing, when the
+      // preflight finds the token invalid" test; this one only checks the
+      // type passed to looksValid() and that the happy path still hashes.
+      await service.resetPassword(dto);
+      expect(mockTokens.looksValid).toHaveBeenCalledWith(dto.token, UserActionTokenType.password_reset);
+      expect(mockHashing.hash).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not change the password when the account is no longer eligible, even though consume() accepted the token', async () => {
+      // Isolates the defense-in-depth guard from token revocation: consume()
+      // succeeding (nothing here makes it reject) is exactly what makes
+      // this NOT the "token already revoked" path.
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.resetPassword(dto)).rejects.toThrow('Link inválido ou expirado');
+
+      expect(mockTokens.consume).toHaveBeenCalled();
+      expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      expect(mockAudit.log).not.toHaveBeenCalled();
     });
 
     it('audits without password, token or pepper', async () => {
@@ -312,7 +372,7 @@ describe('PasswordService', () => {
     beforeEach(() => {
       mockPrisma.user.findUnique.mockResolvedValue(user);
       mockHashing.hash.mockResolvedValue('$argon2id$new');
-      mockPrisma.user.update.mockResolvedValue(user);
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 3 });
     });
 
@@ -323,14 +383,14 @@ describe('PasswordService', () => {
 
       await service.changePassword('user-1', dto);
 
-      expect(mockPrisma.user.update.mock.calls[0][0].data.password).toBe('$argon2id$new');
+      expect(mockPrisma.user.updateMany.mock.calls[0][0].data.password).toBe('$argon2id$new');
     });
 
     it('rejects an incorrect current password', async () => {
       mockHashing.verify.mockResolvedValue({ valid: false, needsRehash: false });
 
       await expect(service.changePassword('user-1', dto)).rejects.toThrow('Senha atual incorreta');
-      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
     });
 
     it('rejects a new password equal to the current one via stored-hash verification', async () => {
@@ -342,7 +402,7 @@ describe('PasswordService', () => {
       await expect(service.changePassword('user-1', dto)).rejects.toThrow(
         'A nova senha deve ser diferente da senha atual',
       );
-      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
     });
 
     it('verifies the new password against the stored hash, not just the plaintext', async () => {
@@ -429,6 +489,187 @@ describe('PasswordService', () => {
 
       const entry = mockAudit.log.mock.calls.find(c => c[0].action === 'change_password')?.[0];
       expect(entry?.ipAddress).toBe('203.0.113.9');
+    });
+
+    it('conditions the write on id, the EXACT hash just verified, and isActive — not id alone', async () => {
+      mockHashing.verify
+        .mockResolvedValueOnce({ valid: true, needsRehash: false })
+        .mockResolvedValueOnce({ valid: false, needsRehash: false });
+
+      await service.changePassword('user-1', dto);
+
+      const where = mockPrisma.user.updateMany.mock.calls[0][0].where;
+      expect(where).toEqual({
+        id: 'user-1',
+        password: user.password,
+        isActive: true,
+        emailVerifiedAt: { not: null },
+      });
+    });
+
+    it('when the conditional write matches zero rows, revokes no session and audits no success', async () => {
+      mockHashing.verify
+        .mockResolvedValueOnce({ valid: true, needsRehash: false })
+        .mockResolvedValueOnce({ valid: false, needsRehash: false });
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.changePassword('user-1', dto)).rejects.toBeInstanceOf(UnauthorizedException);
+
+      expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      expect(mockAudit.log).not.toHaveBeenCalled();
+    });
+
+    describe('concurrency (deterministic — controlled by explicit gates, never real elapsed time)', () => {
+      /**
+       * Models the one column these races are actually about. `updateMany`
+       * below re-implements Postgres's own conditional-UPDATE semantics
+       * against it: a call only "commits" (mutates `stored`, returns
+       * count: 1) if every condition in its `where` still matches `stored`
+       * at the moment it runs — exactly the guarantee the real WHERE
+       * clause gets from a real row lock, without needing a real database
+       * or real concurrent connections to prove the service code honors it.
+       */
+      function fakeConditionalRow(initial: { password: string; isActive: boolean; emailVerifiedAt: Date | null }) {
+        const stored = { ...initial };
+        mockPrisma.user.findUnique.mockImplementation(async () => ({ ...user, ...stored }));
+        mockPrisma.user.updateMany.mockImplementation(async ({ where, data }: any) => {
+          if (where.id !== 'user-1') return { count: 0 };
+          if ('password' in where && where.password !== stored.password) return { count: 0 };
+          if ('isActive' in where && stored.isActive !== where.isActive) return { count: 0 };
+          Object.assign(stored, data);
+          return { count: 1 };
+        });
+        return stored;
+      }
+
+      it('a reset that commits WHILE changePassword is still hashing wins — the stale write is rejected, not applied', async () => {
+        const stored = fakeConditionalRow({
+          password: user.password,
+          isActive: true,
+          emailVerifiedAt: user.emailVerifiedAt,
+        });
+        mockHashing.verify
+          .mockResolvedValueOnce({ valid: true, needsRehash: false })
+          .mockResolvedValueOnce({ valid: false, needsRehash: false });
+
+        const reachedHash = deferred();
+        const releaseHash = deferred<string>();
+        mockHashing.hash.mockImplementation(async () => {
+          reachedHash.resolve();
+          return releaseHash.promise;
+        });
+
+        const changePromise = service.changePassword('user-1', dto);
+        await reachedHash.promise; // changePassword has verified the current password and is now blocked computing the new hash
+
+        // The concurrent reset-password request runs to completion here,
+        // committing a password changePassword never saw.
+        stored.password = '$argon2id$FROM_RESET';
+
+        releaseHash.resolve('$argon2id$FROM_CHANGE_PASSWORD'); // only now does changePassword's hash resolve
+        await expect(changePromise).rejects.toBeInstanceOf(UnauthorizedException);
+
+        expect(stored.password).toBe('$argon2id$FROM_RESET'); // the winner's write stands, untouched
+        expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
+        expect(mockAudit.log).not.toHaveBeenCalled();
+      });
+
+      it('a deactivation that commits WHILE changePassword is still hashing wins — the password is not updated', async () => {
+        const stored = fakeConditionalRow({
+          password: user.password,
+          isActive: true,
+          emailVerifiedAt: user.emailVerifiedAt,
+        });
+        mockHashing.verify
+          .mockResolvedValueOnce({ valid: true, needsRehash: false })
+          .mockResolvedValueOnce({ valid: false, needsRehash: false });
+
+        const reachedHash = deferred();
+        const releaseHash = deferred<string>();
+        mockHashing.hash.mockImplementation(async () => {
+          reachedHash.resolve();
+          return releaseHash.promise;
+        });
+
+        const changePromise = service.changePassword('user-1', dto);
+        await reachedHash.promise;
+
+        // The concurrent admin deactivation commits here.
+        stored.isActive = false;
+
+        releaseHash.resolve('$argon2id$new');
+        await expect(changePromise).rejects.toBeInstanceOf(UnauthorizedException);
+
+        expect(stored.password).toBe(user.password); // untouched
+        expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
+        expect(mockAudit.log).not.toHaveBeenCalled();
+      });
+
+      it('two concurrent changePassword calls against the same original hash — exactly one wins, never both, never neither', async () => {
+        const stored = fakeConditionalRow({
+          password: user.password,
+          isActive: true,
+          emailVerifiedAt: user.emailVerifiedAt,
+        });
+        // Argument-based, not call-order-based: both concurrent requests
+        // share this mock, and each independently checks its OWN current
+        // password and its OWN new password against the (identical, at
+        // this point) stored hash.
+        mockHashing.verify.mockImplementation(async (_storedHash: string, plain: string) =>
+          plain === dto.currentPassword
+            ? { valid: true, needsRehash: false }
+            : { valid: false, needsRehash: false },
+        );
+
+        const reached = [deferred(), deferred()];
+        const release = [deferred<string>(), deferred<string>()];
+        let callIndex = 0;
+        mockHashing.hash.mockImplementation(async (pw: string) => {
+          const i = callIndex++;
+          reached[i].resolve();
+          await release[i].promise;
+          return `$argon2id$for:${pw}`;
+        });
+
+        const dtoA = {
+          currentPassword: dto.currentPassword,
+          newPassword: 'senha concorrente A bem comprida',
+          newPasswordConfirmation: 'senha concorrente A bem comprida',
+        };
+        const dtoB = {
+          currentPassword: dto.currentPassword,
+          newPassword: 'senha concorrente B bem comprida',
+          newPasswordConfirmation: 'senha concorrente B bem comprida',
+        };
+
+        const outcomeA = service.changePassword('user-1', dtoA).then(
+          () => 'fulfilled' as const,
+          () => 'rejected' as const,
+        );
+        const outcomeB = service.changePassword('user-1', dtoB).then(
+          () => 'fulfilled' as const,
+          () => 'rejected' as const,
+        );
+
+        // Both requests have verified their current password and are now
+        // blocked computing their new hash — NEITHER has written yet, so
+        // both necessarily read the same original stored password.
+        await Promise.all([reached[0].promise, reached[1].promise]);
+
+        release[0].resolve(`$argon2id$for:${dtoA.newPassword}`);
+        release[1].resolve(`$argon2id$for:${dtoB.newPassword}`);
+        const [resultA, resultB] = await Promise.all([outcomeA, outcomeB]);
+
+        const outcomes = [resultA, resultB];
+        expect(outcomes.filter(o => o === 'fulfilled')).toHaveLength(1);
+        expect(outcomes.filter(o => o === 'rejected')).toHaveLength(1);
+
+        const winningPassword = resultA === 'fulfilled' ? dtoA.newPassword : dtoB.newPassword;
+        expect(stored.password).toBe(`$argon2id$for:${winningPassword}`);
+        // Exactly one success is audited and revokes sessions — never two, never zero.
+        expect(mockAudit.log.mock.calls.filter(c => c[0].action === 'change_password')).toHaveLength(1);
+        expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });

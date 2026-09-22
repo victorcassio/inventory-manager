@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -9,7 +10,10 @@ import { UserActionToken, UserActionTokenType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService, Tx } from '../audit/audit.service';
 import { HashingService } from '../hashing/hashing.service';
-import { UserActionTokensService } from '../user-action-tokens/user-action-tokens.service';
+import {
+  INVALID_TOKEN_MESSAGE,
+  UserActionTokensService,
+} from '../user-action-tokens/user-action-tokens.service';
 import { MAIL_SERVICE, MailService } from '../mail/mail.service';
 import { buildInvitationEmail } from '../mail/templates/invitation.template';
 import { ActivateAccountDto } from '../auth/dto/activate-account.dto';
@@ -102,6 +106,16 @@ export class InvitationsService {
    * to the login screen after this resolves.
    */
   async activate(dto: ActivateAccountDto, ipAddress?: string): Promise<void> {
+    // Cheap check BEFORE Argon2id: an obviously dead token (wrong type,
+    // absent, expired, used, revoked) is rejected without paying the
+    // hashing cost. Not a security boundary — consume()'s atomic
+    // conditional update below is what actually enforces single-use; this
+    // only decides whether hash() runs at all.
+    const looksValid = await this.tokens.looksValid(dto.token, UserActionTokenType.invitation);
+    if (!looksValid) {
+      throw new BadRequestException(INVALID_TOKEN_MESSAGE);
+    }
+
     const passwordHash = await this.hashing.hash(dto.password);
 
     await this.prisma.$transaction(async (tx: Tx) => {
@@ -111,15 +125,28 @@ export class InvitationsService {
         tx,
       );
 
+      // Conditioned on isActive, not a plain update: if the account was
+      // deactivated after the preflight check above (or between consume()
+      // and here), this matches zero rows and the throw below rolls back
+      // the WHOLE transaction — including consume()'s usedAt write, so a
+      // token rejected this way is never left marked used. Defense in
+      // depth alongside setStatus() revoking pending invitations on
+      // deactivation: that closes the door first, this is the door
+      // staying shut even if some future path deactivates a user without
+      // going through setStatus().
       const now = new Date();
-      await tx.user.update({
-        where: { id: userId },
+      const { count } = await tx.user.updateMany({
+        where: { id: userId, isActive: true },
         data: {
           password: passwordHash,
           emailVerifiedAt: now,
           passwordSetAt: now,
         },
       });
+
+      if (count !== 1) {
+        throw new BadRequestException(INVALID_TOKEN_MESSAGE);
+      }
 
       // Any other invitation still outstanding for this account is now moot.
       await this.tokens.revokePending(userId, UserActionTokenType.invitation, tx);

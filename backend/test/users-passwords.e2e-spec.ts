@@ -8,6 +8,8 @@ import { AppModule } from '../src/app.module';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { FakeMailService } from '../src/modules/mail/fake-mail.service';
+import { HashingService } from '../src/modules/hashing/hashing.service';
+import { INVALID_TOKEN_MESSAGE } from '../src/modules/user-action-tokens/user-action-tokens.service';
 import { hashSeedPassword } from '../prisma/seed-hash';
 
 const ADMIN_EMAIL = 'e2e-admin-upm@test.com';
@@ -19,10 +21,12 @@ const NEW_PASSWORD = 'Outra senha e2e bem comprida';
 
 const ALL_EMAILS = [ADMIN_EMAIL, ATTENDANT_EMAIL, INVITED_EMAIL, LEGACY_EMAIL];
 
-// The single message every token defect must produce. Expired, already-used and
-// revoked have to be indistinguishable from outside: any divergence is an
-// enumeration oracle, so each of the three asserts this exact string.
-const INVALID_TOKEN_MESSAGE = 'Link inválido ou expirado';
+// INVALID_TOKEN_MESSAGE imported from production, not duplicated as a local
+// literal: the single message every token defect must produce (expired,
+// already-used and revoked have to be indistinguishable from outside — any
+// divergence is an enumeration oracle), so every assertion against it should
+// break loudly if the production string ever changes, not silently compare
+// two copies that drifted apart.
 
 // A UUID has hyphens at fixed positions; an IPv4/IPv6 address never does in
 // that pattern. Good enough to distinguish "looks like a uuid" from "looks
@@ -52,10 +56,110 @@ async function sleepPastCurrentSecond(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 1000 - msIntoSecond + 50));
 }
 
+/**
+ * A promise plus its own resolve function, exposed separately. Used below to
+ * order two concurrent HTTP requests deterministically, never by racing on
+ * real elapsed time.
+ */
+function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(res => { resolve = res; });
+  return { promise, resolve };
+}
+
+/**
+ * Replaces the LIVE HashingService.hash with a version that calls straight
+ * through to the real Argon2id implementation but pauses right before doing
+ * so — ONLY on the FIRST call — resolving `reachedPromise` the instant that
+ * first call happens. A test awaits that promise to know — deterministically,
+ * never by polling or by waiting a fixed delay — that the request under test
+ * has passed every earlier check and is now blocked on the hash, then runs
+ * whatever concurrent operation it wants to win the race before calling
+ * `release()`.
+ *
+ * Only the first call is gated, every later one passes straight through:
+ * several of these tests deliberately trigger a SECOND real hash() call
+ * during the gate window (e.g. the concurrent reset-password's own new-
+ * password hash) — gating that one too would block it on the same release
+ * nothing has fired yet, deadlocking the "concurrent operation" the test
+ * needs to actually complete before releasing the first gate. This was a
+ * real, reproduced deadlock (not just slow Argon2id) before this fix: the
+ * hung promise never freed the request it belonged to, and the connection
+ * it left open was still there when a later `afterAll` tried to run,
+ * pushing that hook over its own timeout too.
+ *
+ * `restore()` MUST run before the test ends (afterEach below does this
+ * unconditionally), or a later test's unrelated first hash() call hangs
+ * forever waiting on a gate nothing will release.
+ *
+ * Timeout note: tests using this helper run several real Argon2id calls
+ * (memoryCost 64 MiB, timeCost 3) in sequence — measured at 687–1527ms
+ * each end-to-end via `--json` (`testResults[].assertionResults[].duration`),
+ * comfortably inside this suite's normal 30s default (`testTimeout` in
+ * jest-e2e.config.ts). None of them carry a per-test timeout override: with
+ * ~20x headroom already, one would only raise the ceiling a regression has
+ * to clear before anyone notices, not make the tests more reliable. An
+ * earlier version of these tests DID carry a 60000ms override — added while
+ * chasing what turned out to be a real deadlock in this same helper (see
+ * above), not slow hashing. Once the deadlock was fixed, the tests
+ * consistently finished in under 2s, and the override was removed; keeping
+ * it would have masked a real 10-20x slowdown as a passing test.
+ */
+function gateHash(hashingService: HashingService) {
+  const original = hashingService.hash.bind(hashingService);
+  const reached = deferred<void>();
+  const release = deferred<void>();
+  let gatedCallMade = false;
+  const spy = jest.spyOn(hashingService, 'hash').mockImplementation(async (pw: string) => {
+    if (!gatedCallMade) {
+      gatedCallMade = true;
+      reached.resolve();
+      await release.promise;
+    }
+    return original(pw);
+  });
+  return {
+    reachedPromise: reached.promise,
+    release: () => release.resolve(),
+    restore: () => spy.mockRestore(),
+  };
+}
+
+/**
+ * Same idea as gateHash(), for exactly `count` concurrent hash() calls
+ * gated independently by call order — used to prove that two requests
+ * racing each other both read the same starting state (neither has written
+ * yet) before either is allowed to proceed, so a losing request fails at
+ * the intended conditional-write guard specifically, not at an earlier
+ * check that happened to also reject a since-changed value. Any call
+ * beyond the first `count` passes straight through, ungated, for the same
+ * deadlock-avoidance reason gateHash() only gates its first call.
+ */
+function gateHashSequence(hashingService: HashingService, count: number) {
+  const original = hashingService.hash.bind(hashingService);
+  const reached = Array.from({ length: count }, () => deferred<void>());
+  const release = Array.from({ length: count }, () => deferred<void>());
+  let callIndex = 0;
+  const spy = jest.spyOn(hashingService, 'hash').mockImplementation(async (pw: string) => {
+    const i = callIndex++;
+    if (i < count) {
+      reached[i].resolve();
+      await release[i].promise;
+    }
+    return original(pw);
+  });
+  return {
+    reachedPromises: reached.map(d => d.promise),
+    release: (i: number) => release[i].resolve(),
+    restore: () => spy.mockRestore(),
+  };
+}
+
 describe('Users and passwords (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let mail: FakeMailService;
+  let hashingService: HashingService;
   let seedHash: string;
   // The ThrottlerGuard's in-memory storage is a singleton shared by every
   // request this process handles. Left alone, the sheer number of logins and
@@ -160,6 +264,7 @@ describe('Users and passwords (e2e)', () => {
 
     prisma = module.get(PrismaService);
     mail = module.get(FakeMailService);
+    hashingService = module.get(HashingService);
     throttlerStorage = module.get(ThrottlerStorage);
 
     // Argon2id at 64 MiB / t=3 is deliberately expensive; the input is constant,
@@ -202,6 +307,10 @@ describe('Users and passwords (e2e)', () => {
   }
 
   afterEach(async () => {
+    // Safety net alongside each concurrency test's own explicit restore():
+    // a spy left in place would gate a later, unrelated test's hash() call
+    // forever, since nothing would ever call its release().
+    jest.restoreAllMocks();
     await cleanupFixtures();
     await prisma.user.deleteMany({ where: { email: { in: [INVITED_EMAIL, LEGACY_EMAIL] } } });
   });
@@ -499,6 +608,181 @@ describe('Users and passwords (e2e)', () => {
         .set('Authorization', `Bearer ${session.accessToken}`)
         .expect(401);
     });
+
+    it('revokes a pending invitation on deactivation — the old activation link is rejected and the account never activates', async () => {
+      const { accessToken: adminToken } = await login(ADMIN_EMAIL, PASSWORD);
+
+      const created = await api()
+        .post('/api/v1/users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Convidada', email: INVITED_EMAIL, role: 'attendant' });
+      expect(created.status).toBe(201);
+      const invitedId = created.body.user.id;
+      const token = lastTokenFrom(mail);
+
+      await api()
+        .patch(`/api/v1/users/${invitedId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ isActive: false })
+        .expect(200);
+
+      const row = await prisma.userActionToken.findFirst({
+        where: { user: { email: INVITED_EMAIL } },
+      });
+      expect(row!.revokedAt).not.toBeNull();
+      expect(row!.usedAt).toBeNull(); // revoked, never consumed
+
+      const activation = await api()
+        .post('/api/v1/auth/activate-account')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+      expect(activation.status).toBe(400);
+      expect(JSON.stringify(activation.body)).toContain(INVALID_TOKEN_MESSAGE);
+
+      // Token rejected -> account never activates: no password, no verification.
+      const after = await prisma.user.findUnique({ where: { email: INVITED_EMAIL } });
+      expect(after!.password).toBeNull();
+      expect(after!.passwordSetAt).toBeNull();
+      expect(after!.emailVerifiedAt).toBeNull();
+      await api()
+        .post('/api/v1/auth/login')
+        .send({ email: INVITED_EMAIL, password: NEW_PASSWORD })
+        .expect(401);
+    });
+
+    it('revokes a pending password-reset token on deactivation — the old reset link is rejected, the password is untouched, and reactivating does not resurrect it', async () => {
+      const { accessToken: adminToken } = await login(ADMIN_EMAIL, PASSWORD);
+      const attendant = await prisma.user.findUnique({ where: { email: ATTENDANT_EMAIL } });
+
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const token = lastTokenFrom(mail);
+
+      await api()
+        .patch(`/api/v1/users/${attendant!.id}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ isActive: false })
+        .expect(200);
+
+      const row = await prisma.userActionToken.findFirst({
+        where: { user: { email: ATTENDANT_EMAIL }, type: 'password_reset' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(row!.revokedAt).not.toBeNull();
+      expect(row!.usedAt).toBeNull();
+
+      const reset = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+      expect(reset.status).toBe(400);
+      expect(JSON.stringify(reset.body)).toContain(INVALID_TOKEN_MESSAGE);
+
+      const afterReject = await prisma.user.findUnique({ where: { email: ATTENDANT_EMAIL } });
+      expect(afterReject!.password).toBe(seedHash); // untouched by the rejected reset
+
+      // Reactivating does not resurrect the old, already-revoked token.
+      await api()
+        .patch(`/api/v1/users/${attendant!.id}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ isActive: true })
+        .expect(200);
+      await api()
+        .post('/api/v1/auth/login')
+        .send({ email: ATTENDANT_EMAIL, password: PASSWORD })
+        .expect(200);
+
+      const staleRetry = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+      expect(staleRetry.status).toBe(400);
+      expect(JSON.stringify(staleRetry.body)).toContain(INVALID_TOKEN_MESSAGE);
+    });
+
+    it('rolls back completely when the account-state guard alone rejects — even a not-yet-revoked token is left unused', async () => {
+      // Isolates the isActive re-check inside activate()'s own transaction
+      // from token revocation: the user row is flipped inactive directly
+      // (bypassing setStatus(), which would also revoke the token), so the
+      // token going into this request is still, by every criterion
+      // consume() itself checks, perfectly valid.
+      const { accessToken: adminToken } = await login(ADMIN_EMAIL, PASSWORD);
+      const created = await api()
+        .post('/api/v1/users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Convidada', email: INVITED_EMAIL, role: 'attendant' });
+      const invitedId = created.body.user.id;
+      const token = lastTokenFrom(mail);
+
+      await prisma.user.update({ where: { id: invitedId }, data: { isActive: false } });
+
+      const activation = await api()
+        .post('/api/v1/auth/activate-account')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+      expect(activation.status).toBe(400);
+      expect(JSON.stringify(activation.body)).toContain(INVALID_TOKEN_MESSAGE);
+
+      // Full rollback: consume() DID mark the token used inside the
+      // transaction, but the isActive guard's throw rolled that back too —
+      // on disk the token must look exactly as if this request never
+      // touched it.
+      const row = await prisma.userActionToken.findFirst({
+        where: { user: { email: INVITED_EMAIL } },
+      });
+      expect(row!.usedAt).toBeNull();
+      expect(row!.revokedAt).toBeNull();
+
+      const after = await prisma.user.findUnique({ where: { email: INVITED_EMAIL } });
+      expect(after!.password).toBeNull();
+      expect(after!.emailVerifiedAt).toBeNull();
+      expect(after!.passwordSetAt).toBeNull();
+    });
+
+    it('concurrency: a deactivation that completes WHILE activation is still hashing wins — the account never activates', async () => {
+      const { accessToken: adminToken } = await login(ADMIN_EMAIL, PASSWORD);
+      const created = await api()
+        .post('/api/v1/users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Convidada', email: INVITED_EMAIL, role: 'attendant' });
+      const invitedId = created.body.user.id;
+      const token = lastTokenFrom(mail);
+
+      const gate = gateHash(hashingService);
+      // supertest/superagent requests dispatch lazily — only the first
+      // .then()/await on the Test object calls superagent's end() and
+      // actually sends anything. Without the trailing .then() here, this
+      // request would sit unsent until awaited below, gate.reachedPromise
+      // would never resolve, and the test would hang until Jest's timeout.
+      const activatePromise = api()
+        .post('/api/v1/auth/activate-account')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD })
+        .then(res => res);
+
+      // Deterministic: activation has passed the cheap preflight and is now
+      // computing Argon2id — guaranteed by the gate, never by a delay.
+      await gate.reachedPromise;
+
+      // setStatus() revokes the pending invitation in the SAME transaction as
+      // isActive, so by the time this commits the token is already dead —
+      // the race below proves that combination (revoke-on-deactivate) wins
+      // against a concurrent activation, not the isActive guard on its own.
+      // The guard in isolation, with the token deliberately left un-revoked,
+      // is the "rolls back completely when the account-state guard alone
+      // rejects" test above.
+      await api()
+        .patch(`/api/v1/users/${invitedId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ isActive: false })
+        .expect(200);
+
+      gate.release();
+      const activation = await activatePromise;
+      gate.restore();
+
+      expect(activation.status).toBe(400);
+      expect(JSON.stringify(activation.body)).toContain(INVALID_TOKEN_MESSAGE);
+
+      const after = await prisma.user.findUnique({ where: { email: INVITED_EMAIL } });
+      expect(after!.isActive).toBe(false);
+      expect(after!.password).toBeNull();
+      expect(after!.passwordSetAt).toBeNull();
+    });
   });
 
   describe('forgot and reset', () => {
@@ -598,6 +882,236 @@ describe('Users and passwords (e2e)', () => {
       expect(JSON.stringify(res.body)).toContain('12 caracteres');
       expect(JSON.stringify(res.body)).not.toContain('xK7q');
     });
+
+    it('two concurrent requests with the SAME token — exactly one succeeds, no partial user change', async () => {
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const token = lastTokenFrom(mail);
+      const bodyA = {
+        token,
+        password: 'senha concorrente A bem comprida',
+        passwordConfirmation: 'senha concorrente A bem comprida',
+      };
+      const bodyB = {
+        token,
+        password: 'senha concorrente B bem comprida',
+        passwordConfirmation: 'senha concorrente B bem comprida',
+      };
+
+      const [resA, resB] = await Promise.all([
+        api().post('/api/v1/auth/reset-password').send(bodyA),
+        api().post('/api/v1/auth/reset-password').send(bodyB),
+      ]);
+
+      const statuses = [resA.status, resB.status];
+      expect(statuses.filter(s => s === 204)).toHaveLength(1);
+      expect(statuses.filter(s => s === 400)).toHaveLength(1);
+
+      const winningPassword = resA.status === 204 ? bodyA.password : bodyB.password;
+      await api()
+        .post('/api/v1/auth/login')
+        .send({ email: ATTENDANT_EMAIL, password: winningPassword })
+        .expect(200);
+    });
+
+    it('concurrency: a deactivation that completes WHILE reset-password is still hashing wins — the reset never lands', async () => {
+      const { accessToken: adminToken } = await login(ADMIN_EMAIL, PASSWORD);
+      const attendant = await prisma.user.findUnique({ where: { email: ATTENDANT_EMAIL } });
+
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const token = lastTokenFrom(mail);
+
+      const gate = gateHash(hashingService);
+      // See the identical note on the activation concurrency test above:
+      // the trailing .then() dispatches the request immediately instead of
+      // leaving it unsent until awaited.
+      const resetPromise = api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD })
+        .then(res => res);
+
+      await gate.reachedPromise;
+
+      // setStatus() revokes the pending reset token in the SAME transaction
+      // as isActive, so this proves that combination winning against a
+      // concurrent reset — not the isActive guard in isolation. That guard
+      // on its own, with the token deliberately left un-revoked, is the
+      // "rolls back completely when the account-state guard alone rejects"
+      // test below.
+      await api()
+        .patch(`/api/v1/users/${attendant!.id}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ isActive: false })
+        .expect(200);
+
+      gate.release();
+      const reset = await resetPromise;
+      gate.restore();
+
+      expect(reset.status).toBe(400);
+      expect(JSON.stringify(reset.body)).toContain(INVALID_TOKEN_MESSAGE);
+
+      const after = await prisma.user.findUnique({ where: { email: ATTENDANT_EMAIL } });
+      expect(after!.isActive).toBe(false);
+      expect(after!.password).toBe(seedHash);
+    });
+
+    it('rolls back completely when the account-state guard alone rejects — even a not-yet-revoked reset token is left unused', async () => {
+      // Mirrors the equivalent test for activate() above: isolates the
+      // isActive re-check inside resetPassword()'s own transaction from
+      // token revocation, by flipping the user row inactive directly
+      // (bypassing setStatus(), which would also revoke the token). The
+      // token going into this request is still, by every criterion
+      // consume() itself checks, perfectly valid.
+      const attendant = await prisma.user.findUnique({ where: { email: ATTENDANT_EMAIL } });
+
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const token = lastTokenFrom(mail);
+
+      await prisma.user.update({ where: { id: attendant!.id }, data: { isActive: false } });
+
+      const reset = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+      expect(reset.status).toBe(400);
+      expect(JSON.stringify(reset.body)).toContain(INVALID_TOKEN_MESSAGE);
+
+      // Full rollback: consume() DID mark the token used inside the
+      // transaction, but the isActive guard's throw rolled that back too.
+      const row = await prisma.userActionToken.findFirst({
+        where: { user: { email: ATTENDANT_EMAIL }, type: 'password_reset' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(row!.usedAt).toBeNull();
+      expect(row!.revokedAt).toBeNull();
+
+      const after = await prisma.user.findUnique({ where: { email: ATTENDANT_EMAIL } });
+      expect(after!.password).toBe(seedHash); // untouched
+    });
+  });
+
+  describe('Argon2 preflight — hash() must not run for an obviously dead token', () => {
+    it('does not hash for a nonexistent token', async () => {
+      const hashSpy = jest.spyOn(hashingService, 'hash');
+
+      const res = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token: 'nao-existe-mesmo', password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toContain(INVALID_TOKEN_MESSAGE);
+      expect(hashSpy).not.toHaveBeenCalled();
+      hashSpy.mockRestore();
+    });
+
+    it('does not hash for an expired token', async () => {
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const token = lastTokenFrom(mail);
+      await prisma.userActionToken.updateMany({
+        where: { user: { email: ATTENDANT_EMAIL }, type: 'password_reset' },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+
+      const hashSpy = jest.spyOn(hashingService, 'hash');
+      const res = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+
+      expect(res.status).toBe(400);
+      expect(hashSpy).not.toHaveBeenCalled();
+      hashSpy.mockRestore();
+    });
+
+    it('does not hash for an already-used token', async () => {
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const token = lastTokenFrom(mail);
+      const body = { token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD };
+      await api().post('/api/v1/auth/reset-password').send(body).expect(204);
+
+      const hashSpy = jest.spyOn(hashingService, 'hash');
+      const res = await api().post('/api/v1/auth/reset-password').send(body);
+
+      expect(res.status).toBe(400);
+      expect(hashSpy).not.toHaveBeenCalled();
+      hashSpy.mockRestore();
+    });
+
+    it('does not hash for a revoked token', async () => {
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const stale = lastTokenFrom(mail);
+      // A second request revokes the first (see 'invalidates a previous reset token' above).
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+
+      const hashSpy = jest.spyOn(hashingService, 'hash');
+      const res = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token: stale, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+
+      expect(res.status).toBe(400);
+      expect(hashSpy).not.toHaveBeenCalled();
+      hashSpy.mockRestore();
+    });
+
+    it('does not hash for a token issued for a different purpose', async () => {
+      const { accessToken: adminToken } = await login(ADMIN_EMAIL, PASSWORD);
+      await api()
+        .post('/api/v1/users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Convidada', email: INVITED_EMAIL, role: 'attendant' });
+      const invitationToken = lastTokenFrom(mail);
+
+      const hashSpy = jest.spyOn(hashingService, 'hash');
+      const res = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token: invitationToken, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+
+      expect(res.status).toBe(400);
+      expect(hashSpy).not.toHaveBeenCalled();
+      hashSpy.mockRestore();
+    });
+
+    it('DOES hash for a valid token, and the reset completes normally', async () => {
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const token = lastTokenFrom(mail);
+
+      const hashSpy = jest.spyOn(hashingService, 'hash');
+      const res = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+
+      expect(res.status).toBe(204);
+      expect(hashSpy).toHaveBeenCalledTimes(1);
+      hashSpy.mockRestore();
+
+      await api()
+        .post('/api/v1/auth/login')
+        .send({ email: ATTENDANT_EMAIL, password: NEW_PASSWORD })
+        .expect(200);
+    });
+
+    it('every rejected scenario above returns the exact same generic message', async () => {
+      const nonexistent = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token: 'inexistente-de-verdade', password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const expiredToken = lastTokenFrom(mail);
+      await prisma.userActionToken.updateMany({
+        where: { user: { email: ATTENDANT_EMAIL }, type: 'password_reset' },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+      const expired = await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token: expiredToken, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+
+      // The message itself, not the whole envelope: statusCode/error/message
+      // shape is standard Nest boilerplate and not what this guards against
+      // — an enumeration oracle would show up as a DIFFERENT message string
+      // per defect, not as incidental envelope formatting.
+      for (const res of [nonexistent, expired]) {
+        expect(res.status).toBe(400);
+        expect(res.body.message).toEqual(INVALID_TOKEN_MESSAGE);
+      }
+    });
   });
 
   describe('change-password', () => {
@@ -659,6 +1173,113 @@ describe('Users and passwords (e2e)', () => {
 
       expect(res.status).toBe(400);
       expect(JSON.stringify(res.body)).toContain('diferente da senha atual');
+    });
+
+    it('concurrency: a reset that completes WHILE change-password is still hashing wins — the stale write is rejected', async () => {
+      const session = await login(ATTENDANT_EMAIL, PASSWORD);
+      const RESET_PASSWORD = 'senha do reset concorrente bem comprida';
+
+      const gate = gateHash(hashingService);
+      // See the note on the activation concurrency test: the trailing
+      // .then() dispatches the request immediately instead of leaving it
+      // unsent until awaited.
+      const changePromise = api()
+        .post('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${session.accessToken}`)
+        .send({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD, newPasswordConfirmation: NEW_PASSWORD })
+        .then(res => res);
+
+      await gate.reachedPromise; // change-password verified the current password and is now hashing the new one
+
+      // The concurrent reset runs to completion here, while change-password waits.
+      await api().post('/api/v1/auth/forgot-password').send({ email: ATTENDANT_EMAIL }).expect(200);
+      const token = lastTokenFrom(mail);
+      await api()
+        .post('/api/v1/auth/reset-password')
+        .send({ token, password: RESET_PASSWORD, passwordConfirmation: RESET_PASSWORD })
+        .expect(204);
+
+      gate.release();
+      const changeRes = await changePromise;
+      gate.restore();
+
+      expect(changeRes.status).toBe(401);
+
+      await api().post('/api/v1/auth/login').send({ email: ATTENDANT_EMAIL, password: RESET_PASSWORD }).expect(200);
+      await api().post('/api/v1/auth/login').send({ email: ATTENDANT_EMAIL, password: NEW_PASSWORD }).expect(401);
+    });
+
+    it('concurrency: a deactivation that completes WHILE change-password is still hashing wins — the password is not updated', async () => {
+      const { accessToken: adminToken } = await login(ADMIN_EMAIL, PASSWORD);
+      const attendant = await prisma.user.findUnique({ where: { email: ATTENDANT_EMAIL } });
+      const session = await login(ATTENDANT_EMAIL, PASSWORD);
+
+      const gate = gateHash(hashingService);
+      const changePromise = api()
+        .post('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${session.accessToken}`)
+        .send({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD, newPasswordConfirmation: NEW_PASSWORD })
+        .then(res => res);
+
+      await gate.reachedPromise;
+
+      await api()
+        .patch(`/api/v1/users/${attendant!.id}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ isActive: false })
+        .expect(200);
+
+      gate.release();
+      const changeRes = await changePromise;
+      gate.restore();
+
+      expect(changeRes.status).toBe(401);
+
+      const after = await prisma.user.findUnique({ where: { email: ATTENDANT_EMAIL } });
+      expect(after!.isActive).toBe(false);
+      expect(after!.password).toBe(seedHash);
+    });
+
+    it('concurrency: two concurrent change-password requests — exactly one wins via the race-guard, never a coincidental stale-password rejection', async () => {
+      const session = await login(ATTENDANT_EMAIL, PASSWORD);
+      const passwordA = 'senha concorrente A bem comprida';
+      const passwordB = 'senha concorrente B bem comprida';
+
+      const gate = gateHashSequence(hashingService, 2);
+
+      // Both dispatched immediately via the trailing .then() — see the note
+      // on the activation concurrency test above for why that matters.
+      const pA = api()
+        .post('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${session.accessToken}`)
+        .send({ currentPassword: PASSWORD, newPassword: passwordA, newPasswordConfirmation: passwordA })
+        .then(res => res);
+      const pB = api()
+        .post('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${session.accessToken}`)
+        .send({ currentPassword: PASSWORD, newPassword: passwordB, newPasswordConfirmation: passwordB })
+        .then(res => res);
+
+      // Both requests verified the SAME original password and are now
+      // blocked computing their new hash — neither has written yet, so the
+      // loser is guaranteed to fail at the conditional-write guard
+      // specifically, not at an earlier check against an already-changed value.
+      await Promise.all(gate.reachedPromises);
+      gate.release(0);
+      gate.release(1);
+
+      const [resA, resB] = await Promise.all([pA, pB]);
+      gate.restore();
+
+      const statuses = [resA.status, resB.status];
+      expect(statuses.filter(s => s === 204)).toHaveLength(1);
+      expect(statuses.filter(s => s === 401)).toHaveLength(1);
+
+      const winningPassword = resA.status === 204 ? passwordA : passwordB;
+      await api()
+        .post('/api/v1/auth/login')
+        .send({ email: ATTENDANT_EMAIL, password: winningPassword })
+        .expect(200);
     });
   });
 

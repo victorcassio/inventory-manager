@@ -81,7 +81,7 @@ const user = {
 };
 
 const mockPrisma = {
-  user: { findUnique: jest.fn(), update: jest.fn() },
+  user: { findUnique: jest.fn(), updateMany: jest.fn() },
   $transaction: jest.fn(),
 };
 const mockTokens = {
@@ -89,6 +89,7 @@ const mockTokens = {
   consume: jest.fn(),
   revokePending: jest.fn(),
   findLatest: jest.fn(),
+  looksValid: jest.fn(),
 };
 const mockHashing = { hash: jest.fn() };
 const mockMail = { send: jest.fn() };
@@ -107,6 +108,7 @@ describe('InvitationsService', () => {
     mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
     mockTokens.issue.mockResolvedValue('RAW_INVITE_TOKEN');
     mockTokens.revokePending.mockResolvedValue(0);
+    mockTokens.looksValid.mockResolvedValue(true);
     mockPrisma.user.findUnique.mockResolvedValue(user);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -180,16 +182,17 @@ describe('InvitationsService', () => {
     beforeEach(() => {
       mockTokens.consume.mockResolvedValue({ userId: 'user-1' });
       mockHashing.hash.mockResolvedValue('$argon2id$new');
-      mockPrisma.user.update.mockResolvedValue(user);
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
     });
 
     it('sets the password and both verification timestamps', async () => {
       await service.activate(dto);
 
-      const data = mockPrisma.user.update.mock.calls[0][0].data;
-      expect(data.password).toBe('$argon2id$new');
-      expect(data.emailVerifiedAt).toBeInstanceOf(Date);
-      expect(data.passwordSetAt).toBeInstanceOf(Date);
+      const call = mockPrisma.user.updateMany.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'user-1', isActive: true });
+      expect(call.data.password).toBe('$argon2id$new');
+      expect(call.data.emailVerifiedAt).toBeInstanceOf(Date);
+      expect(call.data.passwordSetAt).toBeInstanceOf(Date);
     });
 
     it('runs in a single transaction', async () => {
@@ -219,7 +222,54 @@ describe('InvitationsService', () => {
       mockTokens.consume.mockRejectedValue(new BadRequestException(message));
 
       await expect(service.activate(dto)).rejects.toThrow('Link inválido ou expirado');
-      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects with the generic message, before hashing, when the preflight finds the token invalid', async () => {
+      mockTokens.looksValid.mockResolvedValue(false);
+
+      await expect(service.activate(dto)).rejects.toThrow('Link inválido ou expirado');
+      expect(mockHashing.hash).not.toHaveBeenCalled();
+      expect(mockTokens.consume).not.toHaveBeenCalled();
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
+      expect(mockAudit.log).not.toHaveBeenCalled();
+    });
+
+    it('calls hashing.hash exactly once for a token that passes the preflight', async () => {
+      await service.activate(dto);
+      expect(mockHashing.hash).toHaveBeenCalledTimes(1);
+      expect(mockHashing.hash).toHaveBeenCalledWith(dto.password);
+    });
+
+    it('runs the preflight against the invitation type', async () => {
+      await service.activate(dto);
+      expect(mockTokens.looksValid).toHaveBeenCalledWith(dto.token, UserActionTokenType.invitation);
+    });
+
+    it('does not set the password when the account is no longer active, even though consume() accepted the token', async () => {
+      // Simulates the race: the preflight and consume() both saw a live
+      // token (nothing here says otherwise), but the account itself was
+      // deactivated by the time the conditional write runs. This is the
+      // defense-in-depth check, isolated from token revocation — consume()
+      // succeeding is exactly what makes this NOT the "token already
+      // revoked" path.
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.activate(dto)).rejects.toThrow('Link inválido ou expirado');
+
+      expect(mockTokens.consume).toHaveBeenCalled(); // the token WAS consumed...
+      expect(mockTokens.revokePending).not.toHaveBeenCalled(); // ...but nothing after the guard ran
+      expect(mockAudit.log).not.toHaveBeenCalled();
+    });
+
+    it('rejects with the same generic message whether the token or the account state is the defect', async () => {
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 0 });
+      const fromAccountState = await service.activate(dto).catch((e: Error) => e.message);
+
+      mockTokens.consume.mockRejectedValue(new BadRequestException('Link inválido ou expirado'));
+      const fromBadToken = await service.activate(dto).catch((e: Error) => e.message);
+
+      expect(fromAccountState).toBe(fromBadToken);
     });
 
     it('never exposes the password in the audit payload', async () => {

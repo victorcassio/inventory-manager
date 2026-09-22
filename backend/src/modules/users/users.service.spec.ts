@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { UserActionTokenType, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { UserActionTokensService } from '../user-action-tokens/user-action-tokens.service';
@@ -33,7 +33,7 @@ const mockPrisma = {
   refreshToken: { updateMany: jest.fn() },
   $transaction: jest.fn(),
 };
-const mockTokens = { findLatest: jest.fn() };
+const mockTokens = { findLatest: jest.fn(), revokePending: jest.fn() };
 const mockInvitations = { sendInvitation: jest.fn(), revoke: jest.fn() };
 const mockAudit = { log: jest.fn() };
 
@@ -44,6 +44,7 @@ describe('UsersService', () => {
     jest.clearAllMocks();
     mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
     mockTokens.findLatest.mockResolvedValue(new Map());
+    mockTokens.revokePending.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -300,6 +301,57 @@ describe('UsersService', () => {
     it('does not revoke sessions when reactivating', async () => {
       await service.setStatus('user-1', true, 'admin-1');
       expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('revokes pending invitation and password-reset tokens when deactivating', async () => {
+      await service.setStatus('user-1', false, 'admin-1');
+
+      expect(mockTokens.revokePending).toHaveBeenCalledWith(
+        'user-1',
+        UserActionTokenType.invitation,
+        expect.anything(),
+      );
+      expect(mockTokens.revokePending).toHaveBeenCalledWith(
+        'user-1',
+        UserActionTokenType.password_reset,
+        expect.anything(),
+      );
+    });
+
+    it('does not touch action tokens when reactivating', async () => {
+      await service.setStatus('user-1', true, 'admin-1');
+      expect(mockTokens.revokePending).not.toHaveBeenCalled();
+    });
+
+    it('revokes refresh tokens, invitations and reset tokens all in the same transaction as the deactivation', async () => {
+      const order: string[] = [];
+      mockPrisma.user.update.mockImplementation(async () => {
+        order.push('user.update');
+        return { ...row, isActive: false };
+      });
+      mockPrisma.refreshToken.updateMany.mockImplementation(async () => {
+        order.push('refreshToken.updateMany');
+        return { count: 1 };
+      });
+      mockTokens.revokePending.mockImplementation(async (_id: string, type: string) => {
+        order.push(`revokePending:${type}`);
+        return 1;
+      });
+
+      await service.setStatus('user-1', false, 'admin-1');
+
+      // Only meaningful because $transaction's mock calls straight through —
+      // a real rollback anywhere above would still leave every write applied
+      // in this unit test. The e2e suite proves the rollback itself; this
+      // proves everything runs inside the ONE transaction call, not split
+      // across several.
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(order).toEqual([
+        'user.update',
+        'refreshToken.updateMany',
+        `revokePending:${UserActionTokenType.invitation}`,
+        `revokePending:${UserActionTokenType.password_reset}`,
+      ]);
     });
 
     it('refuses to change the caller own status', async () => {
