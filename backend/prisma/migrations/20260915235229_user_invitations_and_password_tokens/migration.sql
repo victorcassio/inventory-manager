@@ -1,3 +1,5 @@
+BEGIN;
+
 -- 1. Guard: refuse to proceed if any two e-mails collide once normalized.
 --    Aborts the entire migration with a readable message. Never merges or
 --    deletes users.
@@ -69,3 +71,5 @@ ALTER TABLE "user_action_tokens"
 --    schema.prisma, so `prisma db pull` will not round-trip this — do not drop
 --    it if a future `migrate diff` suggests doing so.
 CREATE UNIQUE INDEX "users_email_normalized_key" ON "users" (lower(btrim("email")));
+
+COMMIT;
