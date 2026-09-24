@@ -2,6 +2,12 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <!-- Keeps the path (/reset-password, /activate-account) out of any
+         cross-origin Referer. Deliberately not "no-referrer": that also sends
+         Origin: null on same-origin non-GET requests, which a CORS allowlist
+         rejects the day the SPA and the API share an origin behind a proxy.
+         The fragment itself is stripped from Referer by every browser anyway. -->
+    <meta name="referrer" content="same-origin" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Inventory Manager</title>

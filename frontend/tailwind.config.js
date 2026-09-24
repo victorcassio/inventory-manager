@@ -21,6 +21,9 @@ export default {
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
+          // For error TEXT. The DEFAULT above is a fill and does not meet
+          // 4.5:1 as text on a card in either theme.
+          text: 'hsl(var(--destructive-text))',
         },
         muted: {
           DEFAULT: 'hsl(var(--muted))',

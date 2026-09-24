@@ -9,9 +9,9 @@ import {
   FinancialTransactionOrigin,
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { hashSeedPassword, requireSeedPassword } from './seed-hash';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
@@ -51,24 +51,47 @@ async function main() {
   console.log('🌱 Iniciando seed de dados demo...');
 
   // ─── Users ───────────────────────────────────────────────────────────────
-  const hashed = await bcrypt.hash('Admin@123456', 12);
+  const seedPassword = requireSeedPassword();
+  const hashed = await hashSeedPassword(seedPassword);
+  const now = new Date();
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@inventory.local' },
     update: {},
-    create: { name: 'Administrador', email: 'admin@inventory.local', password: hashed, role: UserRole.admin },
+    create: {
+      name: 'Administrador',
+      email: 'admin@inventory.local',
+      password: hashed,
+      role: UserRole.admin,
+      emailVerifiedAt: now,
+      passwordSetAt: now,
+    },
   });
 
   const attendant = await prisma.user.upsert({
     where: { email: 'atendente@inventory.local' },
     update: {},
-    create: { name: 'Carlos Atendente', email: 'atendente@inventory.local', password: hashed, role: UserRole.attendant },
+    create: {
+      name: 'Carlos Atendente',
+      email: 'atendente@inventory.local',
+      password: hashed,
+      role: UserRole.attendant,
+      emailVerifiedAt: now,
+      passwordSetAt: now,
+    },
   });
 
   const financial = await prisma.user.upsert({
     where: { email: 'financeiro@inventory.local' },
     update: {},
-    create: { name: 'Ana Financeiro', email: 'financeiro@inventory.local', password: hashed, role: UserRole.financial },
+    create: {
+      name: 'Ana Financeiro',
+      email: 'financeiro@inventory.local',
+      password: hashed,
+      role: UserRole.financial,
+      emailVerifiedAt: now,
+      passwordSetAt: now,
+    },
   });
 
   console.log('✓ Usuários criados');
@@ -563,10 +586,10 @@ async function main() {
   console.log('✓ Transações financeiras criadas');
 
   console.log('\n✅ Seed demo concluído!');
-  console.log('\n📋 Credenciais:');
-  console.log('  admin@inventory.local     / Admin@123456 (admin)');
-  console.log('  atendente@inventory.local / Admin@123456 (attendant)');
-  console.log('  financeiro@inventory.local/ Admin@123456 (financial)');
+  console.log('\n📋 Usuários (senha: valor de SEED_ADMIN_PASSWORD):');
+  console.log('  admin@inventory.local      (admin)');
+  console.log('  atendente@inventory.local  (attendant)');
+  console.log('  financeiro@inventory.local (financial)');
 }
 
 main()

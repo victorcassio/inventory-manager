@@ -8,6 +8,11 @@ export interface User {
   isActive: boolean;
   lastLogin?: string | null;
   createdAt: string;
+  // Not optional: /auth/login and /auth/me both select these, so the key is
+  // always present. Null means "never verified" / "no password set", which is
+  // a different fact from "the server didn't tell us".
+  emailVerifiedAt: string | null;
+  passwordSetAt: string | null;
 }
 
 export interface AuthTokens {
@@ -297,4 +302,36 @@ export interface DashboardSummary {
   rentals: DashboardRentals
   inventory: DashboardInventory
   monthlyHistory: DashboardMonthlyHistory[]
+}
+
+export type InvitationStatus = 'none' | 'pending' | 'expired' | 'revoked' | 'accepted'
+
+/**
+ * Mirrors the backend UserResponse exactly. Sensitive fields are absent by
+ * construction — there is deliberately no `password`, `tokenHash`, action
+ * token or refresh token anywhere in this type.
+ */
+export interface AdminUser {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  isActive: boolean
+  // All four are declared non-optional in the backend's UserResponse and
+  // toUserResponse always emits them — invitationExpiresAt included, which is
+  // null rather than absent when no invitation is pending. Keeping the `?`
+  // here would force every consumer to discriminate an undefined the API
+  // cannot produce.
+  emailVerifiedAt: string | null
+  passwordSetAt: string | null
+  lastLogin: string | null
+  createdAt: string
+  updatedAt: string
+  invitationStatus: InvitationStatus
+  invitationExpiresAt: string | null
+}
+
+export interface CreateUserResult {
+  user: AdminUser
+  invitationEmailSent: boolean
 }

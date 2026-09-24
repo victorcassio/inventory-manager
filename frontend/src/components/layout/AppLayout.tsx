@@ -21,14 +21,21 @@ const PAGE_TITLES: Record<string, string> = {
   '/financial/transactions/new': 'Novo Lançamento',
   '/documents': 'Documentos',
   '/403': 'Acesso Negado',
+  '/users': 'Usuários',
+  '/users/new': 'Novo Usuário',
+  '/account/security': 'Segurança da Conta',
 }
 
-function getPageTitle(pathname: string): string {
+/** Exported for a direct unit test: an unmapped route falls back to a
+ * generic title silently, so a missing entry here is only ever caught by
+ * testing this table directly, never by a page failing to render. */
+export function getPageTitle(pathname: string): string {
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname]
   if (pathname.match(/\/customers\/[^/]+\/edit$/)) return 'Editar Cliente'
   if (pathname.match(/\/customers\/[^/]+$/)) return 'Detalhes do Cliente'
   if (pathname.match(/\/inventory\/items\/[^/]+$/)) return 'Detalhes do Item'
   if (pathname.match(/\/rentals\/[^/]+$/)) return 'Detalhes da Locação'
+  if (pathname.match(/\/users\/[^/]+\/edit$/)) return 'Editar Usuário'
   return 'Inventory Manager'
 }
 

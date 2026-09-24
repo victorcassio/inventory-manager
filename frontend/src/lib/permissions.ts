@@ -36,6 +36,10 @@ export const PERMISSIONS = {
   calendar: {
     view: ['admin', 'attendant'] as UserRole[],
   },
+  users: {
+    view: ['admin'] as UserRole[],
+    manage: ['admin'] as UserRole[],
+  },
 } as const
 
 export function hasPermission(role: UserRole, resource: keyof typeof PERMISSIONS, action: string): boolean {

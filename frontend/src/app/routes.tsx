@@ -1,6 +1,7 @@
 import { lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
+import { RoleGuard } from '@/components/layout/RoleGuard'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AuthLayout } from '@/components/layout/AuthLayout'
 
@@ -8,6 +9,15 @@ import { AuthLayout } from '@/components/layout/AuthLayout'
 import { LoginPage }     from '@/pages/LoginPage'
 import { NotFoundPage }  from '@/pages/NotFoundPage'
 import { ForbiddenPage } from '@/pages/ForbiddenPage'
+
+// Deliberately eager, not lazy. These three pages are reached from a link in an
+// e-mail carrying a single-use token in the URL fragment, and the fragment is
+// only stripped once the page has mounted. A lazy route would leave the token
+// in the address bar for the whole download — seconds on a mobile connection —
+// where a screen-share or a shoulder can read it.
+import { ActivateAccountPage } from '@/features/auth/pages/ActivateAccountPage'
+import { ForgotPasswordPage }  from '@/features/auth/pages/ForgotPasswordPage'
+import { ResetPasswordPage }   from '@/features/auth/pages/ResetPasswordPage'
 
 // ─── Lazy (feature pages — carregadas sob demanda) ───────────────────────────
 const DashboardPage = lazy(() =>
@@ -67,8 +77,20 @@ const FinancialDetailPage = lazy(() =>
 const FinancialEditPage = lazy(() =>
   import('@/features/financial/pages/FinancialEditPage').then((m) => ({ default: m.FinancialEditPage }))
 )
+const UsersListPage = lazy(() =>
+  import('@/features/users/pages/UsersListPage').then((m) => ({ default: m.UsersListPage }))
+)
+const UserNewPage = lazy(() =>
+  import('@/features/users/pages/UserNewPage').then((m) => ({ default: m.UserNewPage }))
+)
+const UserEditPage = lazy(() =>
+  import('@/features/users/pages/UserEditPage').then((m) => ({ default: m.UserEditPage }))
+)
 const DocumentsListPage = lazy(() =>
   import('@/features/documents/pages/DocumentsListPage').then((m) => ({ default: m.DocumentsListPage }))
+)
+const AccountSecurityPage = lazy(() =>
+  import('@/features/auth/pages/AccountSecurityPage').then((m) => ({ default: m.AccountSecurityPage }))
 )
 const CalendarPage = lazy(() =>
   import('@/features/calendar/pages/CalendarPage').then((m) => ({ default: m.CalendarPage }))
@@ -79,8 +101,13 @@ export function AppRoutes() {
     <BrowserRouter>
       <Routes>
         {/* Public routes */}
+        {/* Public: no ProtectedRoute. Someone activating an account or
+            resetting a password has no session yet, by definition. */}
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/activate-account" element={<ActivateAccountPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
         </Route>
 
         {/* Protected routes */}
@@ -105,11 +132,26 @@ export function AppRoutes() {
             <Route path="/payments" element={<PaymentsListPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/documents" element={<DocumentsListPage />} />
+            {/* Every authenticated role, deliberately outside the admin
+                RoleGuard below: this is each person's own account, not the
+                /users management area. */}
+            <Route path="/account/security" element={<AccountSecurityPage />} />
             <Route path="/financial" element={<Navigate to="/financial/transactions" replace />} />
             <Route path="/financial/transactions" element={<FinancialListPage />} />
             <Route path="/financial/transactions/new" element={<FinancialNewPage />} />
             <Route path="/financial/transactions/:id" element={<FinancialDetailPage />} />
             <Route path="/financial/transactions/:id/edit" element={<FinancialEditPage />} />
+
+            {/* Admin-only: RBAC here is UX. The backend independently enforces
+                @Roles(admin) on every /users/* endpoint (UsersController), so
+                this guard only spares a non-admin an unnecessary round trip and
+                a confusing render — it grants no access the API would not
+                already refuse. */}
+            <Route element={<RoleGuard allowedRoles={['admin']} />}>
+              <Route path="/users" element={<UsersListPage />} />
+              <Route path="/users/new" element={<UserNewPage />} />
+              <Route path="/users/:id/edit" element={<UserEditPage />} />
+            </Route>
           </Route>
         </Route>
 

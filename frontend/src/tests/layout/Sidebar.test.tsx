@@ -25,14 +25,22 @@ function makeUser(role: User['role']): User {
     role,
     isActive: true,
     createdAt: '2024-01-01',
+    emailVerifiedAt: '2024-01-01',
+    passwordSetAt: '2024-01-01',
   }
 }
 
 function renderSidebar(user: User) {
   const clearAuth = vi.fn()
   mockUseAuthStore.mockReturnValue({ user, clearAuth })
-  // Also mock getState for logout
-  ;(useAuthStore as unknown as { getState: () => { refreshToken: string | null } }).getState = vi.fn().mockReturnValue({ refreshToken: null })
+  // endSession() reads clearAuth off getState() directly (not off the hook's
+  // return value), since it has to work outside a component. The refresh
+  // token it revokes comes from client.ts's own module state, not from this
+  // store — the field below is only here because getState()'s stub type
+  // carries it, and stays null/unused throughout this file.
+  ;(useAuthStore as unknown as {
+    getState: () => { refreshToken: string | null; clearAuth: () => void }
+  }).getState = vi.fn().mockReturnValue({ refreshToken: null, clearAuth })
   return { clearAuth, ...render(<MemoryRouter><Sidebar /></MemoryRouter>) }
 }
 
@@ -67,6 +75,31 @@ describe('Sidebar', () => {
     renderSidebar(makeUser('attendant'))
     expect(screen.queryByText('Financeiro')).not.toBeInTheDocument()
   })
+
+  it('shows Usuários nav item for admin role', () => {
+    renderSidebar(makeUser('admin'))
+    const link = screen.getByText('Usuários').closest('a')
+    expect(link).toHaveAttribute('href', '/users')
+  })
+
+  it('does not show Usuários for attendant role', () => {
+    renderSidebar(makeUser('attendant'))
+    expect(screen.queryByText('Usuários')).not.toBeInTheDocument()
+  })
+
+  it('does not show Usuários for financial role', () => {
+    renderSidebar(makeUser('financial'))
+    expect(screen.queryByText('Usuários')).not.toBeInTheDocument()
+  })
+
+  it.each(['admin', 'attendant', 'financial'] as const)(
+    'shows Segurança nav item for %s role, not gated by the admin users permission',
+    (role) => {
+      renderSidebar(makeUser(role))
+      const link = screen.getByText('Segurança').closest('a')
+      expect(link).toHaveAttribute('href', '/account/security')
+    },
+  )
 
   it('shows user name', () => {
     renderSidebar(makeUser('admin'))

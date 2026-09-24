@@ -90,7 +90,7 @@ const FormLabel = React.forwardRef<
   return (
     <Label
       ref={ref}
-      className={cn(error && 'text-destructive', className)}
+      className={cn(error && 'text-destructive-text', className)}
       htmlFor={formItemId}
       {...props}
     />
@@ -101,19 +101,27 @@ FormLabel.displayName = 'FormLabel'
 const FormControl = React.forwardRef<
   React.ElementRef<typeof Slot>,
   React.ComponentPropsWithoutRef<typeof Slot>
->(({ ...props }, ref) => {
+>(({ 'aria-describedby': describedBy, ...props }, ref) => {
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
+
+  // Composed, not overridden. Radix's Slot merges as {...slotProps,
+  // ...childProps} and only composes handlers, style and className — every
+  // other prop is taken from the child. So a field that passes its own
+  // aria-describedby (pointing at a requirements list, say) used to REPLACE
+  // this value and silently lose the link to its own validation message: the
+  // error stayed on screen and was read by nobody. Pulling it out of props and
+  // joining it back keeps both.
+  const describedByIds = [describedBy, formDescriptionId, error ? formMessageId : null]
+    .filter(Boolean)
+    .join(' ')
+
   return (
     <Slot
       ref={ref}
       id={formItemId}
-      aria-describedby={
-        !error
-          ? `${formDescriptionId}`
-          : `${formDescriptionId} ${formMessageId}`
-      }
-      aria-invalid={!!error}
       {...props}
+      aria-describedby={describedByIds || undefined}
+      aria-invalid={!!error}
     />
   )
 })
@@ -146,7 +154,7 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       id={formMessageId}
-      className={cn('text-sm font-medium text-destructive', className)}
+      className={cn('text-sm font-medium text-destructive-text', className)}
       {...props}
     >
       {body}
