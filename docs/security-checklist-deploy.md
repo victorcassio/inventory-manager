@@ -92,7 +92,6 @@ etapas nem as execute fora de ordem, mesmo sob pressão de tempo.
 | `PORT` | porta do servidor (ex: `3003`) |
 | `MAIL_DRIVER` | `smtp` (obrigatório em produção — `fake` é recusado na inicialização) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | credenciais reais do provedor SMTP (obrigatórios quando `MAIL_DRIVER=smtp`) |
-| `TRUST_PROXY` | nº de saltos ou IP/CIDR exato do proxy **se e somente se** houver reverse proxy/load balancer na frente (ver seção 5 — **nunca `true`** como padrão) — vazio/`false` se o backend é acessado direto |
 
 `SEED_ADMIN_PASSWORD` só é necessária no momento pontual de rodar
 `prisma/seed.ts` pela primeira vez — não precisa permanecer configurada como
@@ -128,33 +127,26 @@ variável de ambiente do processo do backend em produção.
 - [ ] HTTPS obrigatório — nunca aceitar HTTP em produção
 - [ ] Certificado SSL/TLS ativo e válido
 - [ ] Porta do backend **não acessível diretamente** via browser — apenas pelo frontend via CORS
-- [ ] **`TRUST_PROXY` configurado corretamente para a topologia real** — se
-      **qualquer** reverse proxy/load balancer/ingress fica na frente deste
-      processo (Railway, Render, Fly, nginx, ALB, k8s ingress — o caso comum
-      em produção), `TRUST_PROXY` **precisa** apontar para ele. Sem isso,
-      `req.ip` — usado pelo rate limiting por IP da seção 7 E pelo
-      `ipAddress` gravado em `AuditLog` — vira o IP do proxy para TODO
-      cliente: o rate limit de `forgot-password`/`login` deixa de ser por
-      usuário e passa a ser uma cota GLOBAL (um único atacante esgota a cota
-      de todo mundo), e a trilha forense de auditoria perde o IP real. Se o
-      backend for acessado DIRETAMENTE (sem proxy na frente), deixe
-      `TRUST_PROXY` vazio/`false` — setá-lo sem um proxy real torna `req.ip`
-      **falsificável** por qualquer cliente via `X-Forwarded-For`, o problema
-      inverso.
-  - [ ] **NUNCA use `TRUST_PROXY=true` como padrão de conveniência.** `true`
-        manda o Express confiar em TODO salto do cabeçalho e usar a entrada
-        MAIS À ESQUERDA de `X-Forwarded-For` como IP do cliente — isso só é
-        seguro se o processo for **literalmente inalcançável** por qualquer
-        caminho que não seja o proxy confiável, e se esse proxy **substituir**
-        o cabeçalho em vez de só acrescentar a ele (nem todo proxy faz isso).
-        Se o cliente conseguir adicionar entradas forjadas na frente do que o
-        proxy escreve, `true` lê a entrada forjada como se fosse o IP real.
-        Prefira **número de saltos** (`1` para exatamente um proxy — o
-        Express então confia na entrada de `X-Forwarded-For` a partir da
-        DIREITA, ou seja, a que só o SEU proxy poderia ter escrito, e ignora
-        qualquer prefixo que o cliente tenha forjado) ou o **IP/CIDR exato**
-        do proxy (`10.0.0.5` ou `10.0.0.0/24`), conforme a infraestrutura
-        real — nunca o valor genérico `true`.
+- [ ] **IP do cliente vem de `CF-Connecting-IP`** — o backend roda no
+      Render, onde (confirmado pelo suporte do Render) 100% do tráfego
+      público passa pelo Cloudflare e pela camada de roteamento do Render,
+      que o cliente não consegue contornar, e o IP do visitante chega em
+      `CF-Connecting-IP`. `resolveClientIp()`
+      (`backend/src/common/client-ip/resolve-client-ip.ts`) é a única fonte
+      desse IP: o rate limiting por IP da seção 7 (`ClientIpThrottlerGuard`)
+      e o `ipAddress` gravado em `AuditLog` (`@ClientIp()`) usam a mesma
+      função e sempre concordam. Nenhuma configuração de `trust proxy` é
+      necessária; o Express fica no padrão (não confia em nada).
+  - [ ] **`X-Forwarded-For` nunca é lido.** Qualquer cliente pode escrever
+        nele. Não reintroduza `req.ip`/`@Ip()` nem `trust proxy` para obter
+        o IP.
+  - [ ] **O backend só pode ser alcançável pelo edge público do Render.**
+        Se ele for exposto por qualquer outro caminho (outro host, IP
+        direto, outro proxy), `CF-Connecting-IP` passa a ser controlado pelo
+        cliente e tanto o rate limit quanto a auditoria ficam falsificáveis.
+        Valor ausente, inválido ou em forma de lista é ignorado e cai no
+        endereço do socket — correto apenas localmente; no Render, isso
+        seria o IP do proxy.
 
 **Verificação:**
 ```bash
@@ -162,9 +154,8 @@ variável de ambiente do processo do backend em produção.
 curl -I -X OPTIONS https://sua-api.com/api/v1/customers \
   -H "Origin: https://evil-site.com" | grep -i "access-control-allow-origin"
 
-# Com TRUST_PROXY configurado para o proxy real: um X-Forwarded-For forjado
-# vindo de FORA do proxy não deve conseguir contornar o rate limit nem
-# aparecer no AuditLog — só o IP que o proxy de fato injeta é confiável.
+# Um X-Forwarded-For forjado não deve conseguir contornar o rate limit nem
+# aparecer no AuditLog — só o CF-Connecting-IP injetado pelo edge conta.
 ```
 
 ---
@@ -257,13 +248,12 @@ reais de cliente.
 - [ ] **Build guard** — confirmar que o build do frontend usado no deploy
   passou pelo guard de bundle (`npm run build` no CI/pipeline, não apenas
   `vite build` direto — ver limitação conhecida no backlog).
-- [ ] **`TRUST_PROXY` reflete a topologia real** (só se houver reverse
-  proxy/load balancer na frente) — disparar uma requisição autenticada que
-  grave `AuditLog` (ex.: trocar a senha em `/account/security`) a partir de
-  uma rede/IP conhecido e confirmar que o `ipAddress` gravado é o IP real do
-  cliente, não o do proxy. Se vários smoke tests desta lista, feitos de
-  máquinas diferentes, gravarem o MESMO `ipAddress`, `TRUST_PROXY` está
-  incorreto.
+- [ ] **IP do cliente é o real, não o do proxy** — disparar uma requisição
+  autenticada que grave `AuditLog` (ex.: trocar a senha em
+  `/account/security`) a partir de uma rede/IP conhecido e confirmar que o
+  `ipAddress` gravado é o IP real do cliente, não o do proxy. Se vários
+  smoke tests desta lista, feitos de máquinas diferentes, gravarem o MESMO
+  `ipAddress`, `CF-Connecting-IP` não está chegando ao backend.
 
 ---
 
@@ -342,7 +332,7 @@ Nenhum item pendente. O portão final encontrou 2 achados Critical (ambos de
 **acurácia de documentação**, não de código: a claim de que nenhum "dado de
 sessão" vai para `localStorage`, e a claim de que `JWT_REFRESH_EXPIRES_IN`
 controla o TTL real do refresh token) e 7 Important (2 de segurança — oracle
-de tempo em `forgot-password` e ausência de `TRUST_PROXY`; 5 de
+de tempo em `forgot-password` e IP do cliente atrás de proxy; 5 de
 acessibilidade, todos em `LoginForm`/`form.tsx`/`AppLayout` — controle
 `disabled` nativo, campo de senha sem toggle, região de status que nasce já
 preenchida, contraste do `FormLabel` em erro, títulos de página ausentes para
@@ -359,8 +349,10 @@ timing — corrigidos com um helper que garante segundos civis distintos,
 confirmado estável em 3 execuções consecutivas; (3) `npm audit --omit=dev`
 rodado nos dois lados, com bump direcionado (sem major) de `axios`/
 `react-router-dom` no frontend — ver item 4 abaixo para o que foi corrigido
-e o que ficou no backlog por exigir major; (4) a documentação de
-`TRUST_PROXY` foi reforçada para nunca recomendar `true` como padrão.
+e o que ficou no backlog por exigir major; (4) a documentação da
+resolução do IP do cliente atrás de proxy foi reforçada.
+Em 2026-09-24, após confirmação do suporte do Render, essa resolução passou
+a usar exclusivamente `CF-Connecting-IP` (ver seção 5), sem `trust proxy`.
 Nenhum achado Critical/Important novo sobreviveu a este checkpoint. Os
 itens abaixo são recomendações pós-release ou limitações aceitas.
 

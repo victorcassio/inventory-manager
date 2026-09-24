@@ -399,11 +399,6 @@ PORT=3000
 NODE_ENV=development
 FRONTEND_URL="http://localhost:5173"
 
-# Defina SÓ se houver reverse proxy/load balancer na frente. Prefira número
-# de saltos ("1") ou o IP/CIDR exato do proxy — nunca "true" como padrão.
-# Ver docs/security-checklist-deploy.md.
-TRUST_PROXY=
-
 # Hashing de senha — gerar com: openssl rand -base64 48
 # Obrigatória. A aplicação recusa iniciar sem ela. Ver docs/authentication-rbac.md.
 PASSWORD_PEPPER=

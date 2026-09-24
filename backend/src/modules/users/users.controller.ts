@@ -4,7 +4,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Ip,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -17,6 +16,7 @@ import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ClientIp } from '../../common/decorators/client-ip.decorator';
 import { UsersService } from './users.service';
 import { ListUsersDto } from './dto/list-users.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -36,7 +36,7 @@ export class UsersController {
 
   @Post()
   @Roles(UserRole.admin)
-  create(@Body() dto: CreateUserDto, @Request() req: any, @Ip() ip: string) {
+  create(@Body() dto: CreateUserDto, @Request() req: any, @ClientIp() ip: string | undefined) {
     return this.usersService.create(dto, req.user.id, ip);
   }
 
@@ -52,7 +52,7 @@ export class UsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
     @Request() req: any,
-    @Ip() ip: string,
+    @ClientIp() ip: string | undefined,
   ) {
     return this.usersService.update(id, dto, req.user.id, ip);
   }
@@ -63,7 +63,7 @@ export class UsersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserStatusDto,
     @Request() req: any,
-    @Ip() ip: string,
+    @ClientIp() ip: string | undefined,
   ) {
     return this.usersService.setStatus(id, dto.isActive, req.user.id, ip);
   }
@@ -71,14 +71,14 @@ export class UsersController {
   @Post(':id/resend-invitation')
   @Roles(UserRole.admin)
   @HttpCode(HttpStatus.OK)
-  resendInvitation(@Param('id', ParseUUIDPipe) id: string, @Request() req: any, @Ip() ip: string) {
+  resendInvitation(@Param('id', ParseUUIDPipe) id: string, @Request() req: any, @ClientIp() ip: string | undefined) {
     return this.usersService.resendInvitation(id, req.user.id, ip);
   }
 
   @Post(':id/revoke-invitation')
   @Roles(UserRole.admin)
   @HttpCode(HttpStatus.NO_CONTENT)
-  revokeInvitation(@Param('id', ParseUUIDPipe) id: string, @Request() req: any, @Ip() ip: string) {
+  revokeInvitation(@Param('id', ParseUUIDPipe) id: string, @Request() req: any, @ClientIp() ip: string | undefined) {
     return this.usersService.revokeInvitation(id, req.user.id, ip);
   }
 }

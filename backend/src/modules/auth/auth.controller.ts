@@ -7,11 +7,11 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
-  Ip,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ClientIp } from '../../common/decorators/client-ip.decorator';
 import { AuthService } from './auth.service';
 import { PasswordService } from './password.service';
 import { InvitationsService } from '../users/invitations.service';
@@ -66,14 +66,14 @@ export class AuthController {
   @Throttle({ global: { ttl: 900_000, limit: 5 } })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  async forgotPassword(@Body() dto: ForgotPasswordDto, @Ip() ip: string) {
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @ClientIp() ip: string | undefined) {
     return this.passwordService.requestReset(dto.email, ip);
   }
 
   @Throttle({ global: { ttl: 900_000, limit: 10 } })
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async resetPassword(@Body() dto: ResetPasswordDto, @Ip() ip: string) {
+  async resetPassword(@Body() dto: ResetPasswordDto, @ClientIp() ip: string | undefined) {
     await this.passwordService.resetPassword(dto, ip);
   }
 
@@ -81,14 +81,14 @@ export class AuthController {
   @Throttle({ global: { ttl: 900_000, limit: 10 } })
   @Post('change-password')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto, @Ip() ip: string) {
+  async changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto, @ClientIp() ip: string | undefined) {
     await this.passwordService.changePassword(user.id, dto, ip);
   }
 
   @Throttle({ global: { ttl: 900_000, limit: 10 } })
   @Post('activate-account')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async activateAccount(@Body() dto: ActivateAccountDto, @Ip() ip: string) {
+  async activateAccount(@Body() dto: ActivateAccountDto, @ClientIp() ip: string | undefined) {
     await this.invitationsService.activate(dto, ip);
   }
 }

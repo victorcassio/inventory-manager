@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import helmet from 'helmet';
 import * as bcrypt from 'bcrypt';
+import { createHash } from 'crypto';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import { AppModule } from '../src/app.module';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
@@ -1337,6 +1338,72 @@ describe('Users and passwords (e2e)', () => {
 
       expect(statuses.slice(0, 10)).toEqual(Array(10).fill(401));
       expect(statuses[10]).toBe(429);
+    });
+
+    // Every address below is from a documentation range (RFC 5737 / 3849),
+    // so neither these requests nor the ip=… lines they log carry a real IP.
+    it('keys the limit by CF-Connecting-IP and ignores a rotating X-Forwarded-For', async () => {
+      // forgot-password: 5 per 15 min. An unknown e-mail keeps mail and tokens out of it.
+      const forgot = (cfIp: string, xff: string) =>
+        api()
+          .post('/api/v1/auth/forgot-password')
+          .set('CF-Connecting-IP', cfIp)
+          .set('X-Forwarded-For', xff)
+          .send({ email: 'nao-existe-ip@test.com' });
+
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        statuses.push((await forgot('198.51.100.10', `203.0.113.${i + 1}`)).status);
+      }
+      expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+
+      // A second client behind the same proxy socket still has its own quota.
+      expect((await forgot('198.51.100.11', '203.0.113.1')).status).toBe(200);
+      expect((await forgot('2001:db8::11', '203.0.113.1')).status).toBe(200);
+    });
+
+    it('shares one quota across every IPv6 address in the same /64', async () => {
+      const forgot = (cfIp: string) =>
+        api()
+          .post('/api/v1/auth/forgot-password')
+          .set('CF-Connecting-IP', cfIp)
+          .send({ email: 'nao-existe-ip@test.com' });
+
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        statuses.push((await forgot(`2001:db8:0:5::${(i + 1).toString(16)}`)).status);
+      }
+      expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+      expect((await forgot('2001:db8:0:6::1')).status).toBe(200);
+    });
+
+    it('records in the audit log the same address the throttler tracked', async () => {
+      const clientIp = '198.51.100.20';
+      const session = await login(ATTENDANT_EMAIL, PASSWORD);
+
+      await api()
+        .post('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${session.accessToken}`)
+        .set('CF-Connecting-IP', clientIp)
+        .set('X-Forwarded-For', '203.0.113.66')
+        .send({
+          currentPassword: PASSWORD,
+          newPassword: NEW_PASSWORD,
+          newPasswordConfirmation: NEW_PASSWORD,
+        })
+        .expect(204);
+
+      const log = await prisma.auditLog.findFirst({
+        where: { action: 'change_password', user: { email: ATTENDANT_EMAIL } },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(log!.ipAddress).toBe(clientIp);
+
+      // ThrottlerGuard.generateKey: sha256(`${Class}-${handler}-${throttler}-${tracker}`).
+      const expectedKey = createHash('sha256')
+        .update(`AuthController-changePassword-global-${clientIp}`)
+        .digest('hex');
+      expect(throttlerStorage.storage.has(expectedKey)).toBe(true);
     });
   });
 
